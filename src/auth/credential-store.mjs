@@ -21,7 +21,7 @@ export function generateCredentialSecret() {
 
 export function principalIdFor(name) {
   if (typeof name !== 'string' || name.trim() !== name || !/^[A-Za-z0-9._-]{1,64}$/.test(name)) {
-    throw new Error('dsh-gateway: credential principal name must be a short token such as operator-1')
+    throw new Error('dsh-one-gateway: credential principal name must be a short token such as operator-1')
   }
   return `credential:${name}`
 }
@@ -38,21 +38,21 @@ export function parseStoreDocument(raw) {
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error('dsh-gateway: credential store is not valid JSON')
+    throw new Error('dsh-one-gateway: credential store is not valid JSON')
   }
   if (!isRecord(parsed) || parsed.version !== STORE_VERSION || !Array.isArray(parsed.credentials)) {
-    throw new Error('dsh-gateway: credential store is malformed')
+    throw new Error('dsh-one-gateway: credential store is malformed')
   }
   const credentials = []
   const seen = new Set()
   for (const entry of parsed.credentials) {
     if (!isRecord(entry) || typeof entry.principalId !== 'string' || typeof entry.verifier !== 'string') {
-      throw new Error('dsh-gateway: credential store entry is malformed')
+      throw new Error('dsh-one-gateway: credential store entry is malformed')
     }
     if (!entry.principalId.startsWith('credential:') || entry.principalId.length > MAX_PRINCIPAL_LENGTH) {
-      throw new Error('dsh-gateway: credential store principal is invalid')
+      throw new Error('dsh-one-gateway: credential store principal is invalid')
     }
-    if (seen.has(entry.principalId)) throw new Error('dsh-gateway: credential store contains duplicate principals')
+    if (seen.has(entry.principalId)) throw new Error('dsh-one-gateway: credential store contains duplicate principals')
     seen.add(entry.principalId)
     credentials.push(Object.freeze({
       principalId: entry.principalId,
@@ -66,14 +66,14 @@ export function parseStoreDocument(raw) {
 
 export async function assertRestrictiveStoreFile(path) {
   const info = await stat(path)
-  if (!info.isFile()) throw new Error('dsh-gateway: credential store path is not a file')
+  if (!info.isFile()) throw new Error('dsh-one-gateway: credential store path is not a file')
   if (process.platform !== 'win32') {
     const mode = info.mode & 0o777
     if (mode !== ALLOWED_MODE && mode !== 0o400) {
-      throw new Error('dsh-gateway: credential store permissions are too broad')
+      throw new Error('dsh-one-gateway: credential store permissions are too broad')
     }
     if (typeof process.getuid === 'function' && info.uid !== process.getuid()) {
-      throw new Error('dsh-gateway: credential store is not owned by the current user')
+      throw new Error('dsh-one-gateway: credential store is not owned by the current user')
     }
   }
 }
@@ -96,7 +96,7 @@ export async function writeCredentialStore(path, document, { exclusive = false }
     }
     return
   }
-  const temporary = `${path}.dsh-gateway-${process.pid}.tmp`
+  const temporary = `${path}.dsh-one-gateway-${process.pid}.tmp`
   await writeFile(temporary, payload, { encoding: 'utf8', mode: ALLOWED_MODE })
   await chmod(temporary, ALLOWED_MODE)
   await rename(temporary, path)
@@ -114,7 +114,7 @@ export async function issueCredential(path, name) {
     document = { version: STORE_VERSION, credentials: [] }
   }
   if (document.credentials.some(entry => entry.principalId === principalId && entry.revoked !== true)) {
-    throw new Error(`dsh-gateway: credential ${principalId} already exists`)
+    throw new Error(`dsh-one-gateway: credential ${principalId} already exists`)
   }
   const next = {
     version: STORE_VERSION,
@@ -135,7 +135,7 @@ export async function issueCredential(path, name) {
     if (exclusive && error?.code === 'EEXIST') {
       document = await readCredentialStore(path)
       if (document.credentials.some(entry => entry.principalId === principalId && entry.revoked !== true)) {
-        throw new Error(`dsh-gateway: credential ${principalId} already exists`)
+        throw new Error(`dsh-one-gateway: credential ${principalId} already exists`)
       }
       await writeCredentialStore(path, {
         version: STORE_VERSION,
@@ -158,7 +158,7 @@ export async function revokeCredential(path, name) {
     found = true
     return { ...entry, revoked: true }
   })
-  if (!found) throw new Error(`dsh-gateway: credential ${principalId} was not found`)
+  if (!found) throw new Error(`dsh-one-gateway: credential ${principalId} was not found`)
   await writeCredentialStore(path, { version: STORE_VERSION, credentials })
   return { principalId, revoked: true }
 }

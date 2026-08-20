@@ -21,13 +21,13 @@ export function detectProviders({ hasCommand = commandExists } = {}) {
 export function selectProvider(detected, requested) {
   if (requested) {
     if (requested !== PROVIDER_TAILSCALE && requested !== PROVIDER_CLOUDFLARE) {
-      throw new Error('dsh-gateway: --provider must be tailscale-serve or cloudflare-access')
+      throw new Error('dsh-one-gateway: --provider must be tailscale-serve or cloudflare-access')
     }
     return requested
   }
   if (detected.length === 1) return detected[0].id
   if (detected.length === 0) {
-    throw new Error('dsh-gateway: no provider executable was detected; pass --provider tailscale-serve or --provider cloudflare-access')
+    throw new Error('dsh-one-gateway: no provider executable was detected; pass --provider tailscale-serve or --provider cloudflare-access')
   }
-  throw new Error('dsh-gateway: multiple providers were detected; pass --provider tailscale-serve or --provider cloudflare-access')
+  throw new Error('dsh-one-gateway: multiple providers were detected; pass --provider tailscale-serve or --provider cloudflare-access')
 }

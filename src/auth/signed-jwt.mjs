@@ -33,7 +33,7 @@ export function createSignedJwtAuth({
   jwksCache,
 }) {
   if (profile.profileId !== CLOUDFLARE_JWT_PROFILE.profileId) {
-    throw new Error('dsh-gateway: unknown signed-jwt profile')
+    throw new Error('dsh-one-gateway: unknown signed-jwt profile')
   }
   const cache = jwksCache ?? createJwksCache({ teamOrigin, fetchImpl, now })
   const consumedHeaders = Object.freeze([

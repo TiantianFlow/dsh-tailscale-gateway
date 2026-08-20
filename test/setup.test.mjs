@@ -96,11 +96,27 @@ test('setup appends a distinct boot-time insert without rewriting a compatible u
   assert.match(appended, new RegExp(`id: ${USER_INSTANCE_ID}`))
   const initialized = appendProfileEntry('# DSH profile\n[]\n', entry)
   assert.doesNotMatch(initialized, /\[\]/)
-  assert.match(initialized, /dsh-gateway/)
+  assert.match(initialized, /dsh-one-gateway/)
   assert.throws(() => appendProfileEntry(appended, entry), /already exists/)
+  const previous = `- id: dsh-gateway\n  name: dsh-gateway\n  config:\n    enabled: true\n`
+  assert.throws(() => appendProfileEntry(previous, entry), /already exists/)
+  const previousUser = `- id: dsh-gateway-user-instance\n  config:\n    enabled: true\n`
+  assert.throws(() => appendProfileEntry(previousUser, entry), /already exists/)
   const legacy = `- id: dsh-tailscale-gateway\n  config:\n    enabled: true\n`
   assert.throws(() => appendProfileEntry(legacy, entry), /already exists/)
   assert.throws(() => appendProfileEntry('key: value\n', entry), /top-level YAML list/)
+})
+
+test('setup detects a previous dsh-gateway profile entry as already present', () => {
+  const entry = renderProfileEntry(createTailscalePlan(tailscaleStatus(), {}, { ports: [443] }).config)
+  const previous = `- id: dsh-gateway\n  name: dsh-gateway\n  config:\n    enabled: true\n`
+  assert.throws(() => appendProfileEntry(previous, entry), /already exists/)
+})
+
+test('setup detects a previous dsh-gateway-user-instance profile entry as already present', () => {
+  const entry = renderProfileEntry(createTailscalePlan(tailscaleStatus(), {}, { ports: [443] }).config)
+  const previousUser = `- id: dsh-gateway-user-instance\n  config:\n    enabled: true\n`
+  assert.throws(() => appendProfileEntry(previousUser, entry), /already exists/)
 })
 
 test('the shipped disabled baseline remains available after an update', async () => {

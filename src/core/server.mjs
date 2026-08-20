@@ -39,7 +39,7 @@ function createInFlightGuard() {
 }
 
 export function createGatewayServer(config, { isReady = () => false, auth } = {}) {
-  if (!auth) throw new Error('dsh-gateway: createGatewayServer requires an auth module')
+  if (!auth) throw new Error('dsh-one-gateway: createGatewayServer requires an auth module')
   const inFlight = createInFlightGuard()
   const server = createServer((request, response) => {
     if (isReadinessPath(request)) {

@@ -1,5 +1,5 @@
 {
-  "name": "dsh-gateway",
+  "name": "dsh-one-gateway",
   "version": "0.1.0",
   "description": "Private, zero-trust gateway for DeepSeek Harness Web: loopback-only proxy, exact principal allowlists, and provider-agnostic onboarding",
   "license": "MIT",
@@ -8,7 +8,8 @@
   "main": "src/plugin.mjs",
   "exports": "./src/plugin.mjs",
   "bin": {
-    "dsh-gateway": "./bin/dsh-gateway.mjs"
+    "dsh-one-gateway": "./bin/dsh-one-gateway.mjs",
+    "dsh-gateway": "./bin/dsh-one-gateway.mjs"
   },
   "files": [
     "bin",
@@ -23,7 +24,7 @@
   "scripts": {
     "start": "node src/sidecar.mjs",
     "test": "node --test --test-concurrency=1",
-    "check": "node --check src/plugin.mjs && node --check src/sidecar.mjs && node --check src/core/server.mjs && node --check src/core/config.mjs && node --check bin/dsh-gateway.mjs"
+    "check": "node --check src/plugin.mjs && node --check src/sidecar.mjs && node --check src/core/server.mjs && node --check src/core/config.mjs && node --check bin/dsh-one-gateway.mjs"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -39,6 +40,7 @@
   },
   "keywords": [
     "dsh",
+    "dsh-one-gateway",
     "deepseek-harness",
     "dsh-plugin",
     "gateway",

@@ -59,7 +59,7 @@ export function httpsPortFromOrigin(externalOrigin) {
   const url = new URL(externalOrigin)
   const port = url.port === '' ? 443 : Number(url.port)
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error('dsh-gateway: externalOrigin must use an HTTPS port between 1 and 65535')
+    throw new Error('dsh-one-gateway: externalOrigin must use an HTTPS port between 1 and 65535')
   }
   return port
 }

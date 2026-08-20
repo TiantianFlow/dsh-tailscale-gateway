@@ -51,7 +51,7 @@ function fakeRequest(body, contentType = 'application/json') {
 }
 
 test('issued credentials are high-entropy, listed without secrets, and revocable', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'dsh-gateway-cred-'))
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-one-gateway-cred-'))
   const store = join(directory, 'credentials.json')
   const issued = await issueCredential(store, 'operator-1')
   assert.equal(issued.principalId, 'credential:operator-1')
@@ -89,7 +89,7 @@ test('login GET, cross-origin POST, missing Origin, bad fetch metadata, and wron
   }))
   const auth = createGatewayCredentialAuth({
     trustedPrincipals: ['credential:operator-1'],
-    storePath: '/path/to/dsh-gateway/credentials.json',
+    storePath: '/path/to/dsh-one-gateway/credentials.json',
     loadStore,
     externalOrigin: ORIGIN,
     limiter: createLoginLimiter({ maxDelayMs: 0, perSourceMax: 50, globalMax: 50 }),
@@ -129,7 +129,7 @@ test('successful login rotates a host-only session cookie and authenticates subs
   const sessions = createSessionStore()
   const auth = createGatewayCredentialAuth({
     trustedPrincipals: ['credential:operator-1'],
-    storePath: '/path/to/dsh-gateway/credentials.json',
+    storePath: '/path/to/dsh-one-gateway/credentials.json',
     loadStore,
     sessions,
     externalOrigin: ORIGIN,
@@ -168,7 +168,7 @@ test('expired, duplicate, revoked, and restart-stale sessions deny', async () =>
   const sessions = createSessionStore({ idleMs: 50, absoluteMs: 100, now: () => now })
   const auth = createGatewayCredentialAuth({
     trustedPrincipals: ['credential:operator-1'],
-    storePath: '/path/to/dsh-gateway/credentials.json',
+    storePath: '/path/to/dsh-one-gateway/credentials.json',
     loadStore,
     sessions,
     externalOrigin: ORIGIN,
@@ -193,7 +193,7 @@ test('expired, duplicate, revoked, and restart-stale sessions deny', async () =>
   const sessions2 = createSessionStore()
   const auth2 = createGatewayCredentialAuth({
     trustedPrincipals: ['credential:operator-1'],
-    storePath: '/path/to/dsh-gateway/credentials.json',
+    storePath: '/path/to/dsh-one-gateway/credentials.json',
     loadStore,
     sessions: sessions2,
     externalOrigin: ORIGIN,
@@ -209,7 +209,7 @@ test('expired, duplicate, revoked, and restart-stale sessions deny', async () =>
 
   const restarted = createGatewayCredentialAuth({
     trustedPrincipals: ['credential:operator-1'],
-    storePath: '/path/to/dsh-gateway/credentials.json',
+    storePath: '/path/to/dsh-one-gateway/credentials.json',
     loadStore,
     sessions: createSessionStore(),
     externalOrigin: ORIGIN,
@@ -232,8 +232,8 @@ test('rate limits recover automatically and never permanently lock a principal',
 test('malformed store and missing verifier fail readiness', async () => {
   const auth = createGatewayCredentialAuth({
     trustedPrincipals: ['credential:operator-1'],
-    storePath: '/path/to/dsh-gateway/credentials.json',
-    loadStore: async () => { throw new Error('dsh-gateway: credential store is malformed') },
+    storePath: '/path/to/dsh-one-gateway/credentials.json',
+    loadStore: async () => { throw new Error('dsh-one-gateway: credential store is malformed') },
     externalOrigin: ORIGIN,
   })
   const ready = await auth.readiness()

@@ -9,10 +9,10 @@ const PROVIDERS = Object.freeze({
 
 export function getProvider(type) {
   if (type === PROVIDER_EASYTIER) {
-    throw new Error('dsh-gateway: provider type easytier is not supported in v1')
+    throw new Error('dsh-one-gateway: provider type easytier is not supported in v1')
   }
   const provider = PROVIDERS[type]
-  if (!provider) throw new Error(`dsh-gateway: unknown provider ${type}`)
+  if (!provider) throw new Error(`dsh-one-gateway: unknown provider ${type}`)
   return provider
 }
 

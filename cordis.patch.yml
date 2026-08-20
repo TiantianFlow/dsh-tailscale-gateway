@@ -1,8 +1,8 @@
 # The bundle is safe to install but inert until its Web-profile configuration
-# explicitly sets enabled: true. Use `dsh-gateway setup` to generate an enabled
+# explicitly sets enabled: true. Use `dsh-one-gateway setup` to generate an enabled
 # user-instance entry after confirmation.
 - insert:
-    - id: dsh-gateway
-      name: dsh-gateway
+    - id: dsh-one-gateway
+      name: dsh-one-gateway
       config:
         enabled: false

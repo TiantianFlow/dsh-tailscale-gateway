@@ -20,15 +20,15 @@ export const DEFAULT_PROFILE = join(DEFAULT_DSH_HOME, 'profiles', 'web', 'cordis
 
 export function usage() {
   return `Usage:
-  dsh-gateway setup [--provider tailscale-serve|cloudflare-access] [--yes] [--print] [--profile PATH]
+  dsh-one-gateway setup [--provider tailscale-serve|cloudflare-access] [--yes] [--print] [--profile PATH]
                     [--trusted-principal PRINCIPAL] [--external-origin URL]
                     [--team-origin URL] [--application-audience AUD]
-  dsh-gateway doctor [--profile PATH]
-  dsh-gateway credential issue --store PATH --name operator-1
-  dsh-gateway credential revoke --store PATH --name operator-1
-  dsh-gateway credential list --store PATH
+  dsh-one-gateway doctor [--profile PATH]
+  dsh-one-gateway credential issue --store PATH --name operator-1
+  dsh-one-gateway credential revoke --store PATH --name operator-1
+  dsh-one-gateway credential list --store PATH
 
-Private, zero-trust DSH gateway onboarding. Setup previews a plan, refuses
+Private, zero-trust dsh-one-gateway onboarding. Setup previews a plan, refuses
 public/anonymous defaults, and writes a profile entry only after confirmation.
 `
 }
@@ -128,7 +128,7 @@ export async function setupCommand(options, io, deps = {}) {
   await resolved.writeProfile(options.profile, entry)
   io.stdout.write(
     `\nSaved ${options.profile}. Restart the DSH Web process you own to activate it.\n` +
-    `Then run dsh-gateway doctor and open ${plan.externalOrigin} as an allowlisted principal.\n` +
+    `Then run dsh-one-gateway doctor and open ${plan.externalOrigin} as an allowlisted principal.\n` +
     'Setup never restarts supervisors or removes provider resources.\n',
   )
   return { written: true, entry, plan }

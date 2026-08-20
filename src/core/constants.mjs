@@ -1,6 +1,8 @@
-export const PACKAGE_NAME = 'dsh-gateway'
-export const USER_INSTANCE_ID = 'dsh-gateway-user-instance'
-export const BASELINE_INSTANCE_ID = 'dsh-gateway'
+export const PACKAGE_NAME = 'dsh-one-gateway'
+export const USER_INSTANCE_ID = 'dsh-one-gateway-user-instance'
+export const BASELINE_INSTANCE_ID = 'dsh-one-gateway'
+export const PREVIOUS_PACKAGE_NAME = 'dsh-gateway'
+export const PREVIOUS_USER_INSTANCE_ID = 'dsh-gateway-user-instance'
 export const LEGACY_PACKAGE_NAME = 'dsh-tailscale-gateway'
 export const LEGACY_USER_INSTANCE_ID = 'dsh-tailscale-gateway-user-instance'
 
@@ -12,9 +14,9 @@ export const UPSTREAM_ORIGIN = `http://${UPSTREAM_HOST}:${UPSTREAM_PORT}`
 export const UPSTREAM_AUTHORITY = `${UPSTREAM_HOST}:${UPSTREAM_PORT}`
 
 export const ACTIVATION_TOKEN_BYTES = 32
-export const READINESS_PATH = '/.dsh-gateway/ready'
-export const LOGIN_PATH = '/.dsh-gateway/login'
-export const SESSION_COOKIE_NAME = '__Host-dsh-gateway-session'
+export const READINESS_PATH = '/.dsh-one-gateway/ready'
+export const LOGIN_PATH = '/.dsh-one-gateway/login'
+export const SESSION_COOKIE_NAME = '__Host-dsh-one-gateway-session'
 
 export const MAX_DECLARED_REQUEST_BYTES = 160 * 1024 * 1024
 export const MAX_LOGIN_BODY_BYTES = 4096

@@ -68,7 +68,7 @@ test('cloudflare --yes requires every security-sensitive value', async () => {
 })
 
 test('credential issue/list/revoke round-trip without storing the raw secret in list output', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'dsh-gateway-cli-cred-'))
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-one-gateway-cli-cred-'))
   const store = join(directory, 'credentials.json')
   const io = collectIo()
   const issued = await main(['credential', 'issue', '--store', store, '--name', 'operator-1'], io)

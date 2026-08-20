@@ -41,13 +41,13 @@ test('incompatible provider/auth pairings and easytier fail before bind', () => 
     auth: { mode: 'signed-jwt', trustedPrincipals: ['email:operator@example.invalid'] },
   })), /trusted-header/)
   assert.throws(() => assertSafeConfig(tailscaleConfig({
-    auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: '/path/to/dsh-gateway/credentials.json' },
+    auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: '/path/to/dsh-one-gateway/credentials.json' },
   })), /trusted-header/)
   assert.throws(() => assertSafeConfig({
     enabled: true,
     externalOrigin: 'https://gateway.example.invalid:8443',
-    provider: { type: 'easytier', routeManagement: 'verify-only', forwardName: 'dsh-gateway' },
-    auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: '/path/to/dsh-gateway/credentials.json' },
+    provider: { type: 'easytier', routeManagement: 'verify-only', forwardName: 'dsh-one-gateway' },
+    auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: '/path/to/dsh-one-gateway/credentials.json' },
   }), /easytier is not supported/)
   assert.throws(() => assertSafeConfig({
     enabled: true,

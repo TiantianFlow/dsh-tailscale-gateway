@@ -10,9 +10,9 @@ import { fileURLToPath } from 'node:url'
 const sourceDirectory = dirname(fileURLToPath(new URL('../src/sidecar.mjs', import.meta.url)))
 
 test('the dedicated sidecar entry executes through a pnpm-style directory symlink', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'dsh-gateway-entry-'))
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-one-gateway-entry-'))
   try {
-    const linkedSource = join(directory, 'node_modules', 'dsh-gateway', 'src')
+    const linkedSource = join(directory, 'node_modules', 'dsh-one-gateway', 'src')
     await mkdir(dirname(linkedSource), { recursive: true })
     await symlink(sourceDirectory, linkedSource, 'dir')
     const child = spawn(process.execPath, [join(linkedSource, 'sidecar.mjs')], {

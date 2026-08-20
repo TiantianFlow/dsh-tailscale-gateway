@@ -59,5 +59,5 @@ export function apply(ctx, suppliedConfig = {}) {
       try { await current.terminate() } catch { /* DSH owns final process-tree cleanup too. */ }
       try { await current.done } catch { /* The exit was already reported above. */ }
     }
-  }, 'dsh gateway sidecar lifecycle')
+  }, 'dsh-one-gateway sidecar lifecycle')
 }

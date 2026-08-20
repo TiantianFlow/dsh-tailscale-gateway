@@ -4,7 +4,7 @@ import { apply, inject, name } from '../src/plugin.mjs'
 import { TAILSCALE_ORIGIN } from './helpers.mjs'
 
 test('DSH bundle entry remains inert while disabled', () => {
-  assert.equal(name, 'dsh-gateway')
+  assert.equal(name, 'dsh-one-gateway')
   assert.deepEqual(inject, ['subprocess'])
   assert.doesNotThrow(() => apply({}, { enabled: false }))
 })

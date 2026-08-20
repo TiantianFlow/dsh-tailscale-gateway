@@ -24,10 +24,10 @@ function isValidIdentityValue(value, profile) {
 
 export function createTrustedHeaderAuth({ profile, trustedPrincipals }) {
   if (!profile?.profileId || !profile.headerName || !profile.principalNamespace) {
-    throw new Error('dsh-gateway: trusted-header requires a compiled provider identity profile')
+    throw new Error('dsh-one-gateway: trusted-header requires a compiled provider identity profile')
   }
   if (profile.profileId !== TAILSCALE_HEADER_PROFILE.profileId) {
-    throw new Error('dsh-gateway: unknown trusted-header profile')
+    throw new Error('dsh-one-gateway: unknown trusted-header profile')
   }
   const consumedHeaders = Object.freeze([profile.headerName])
 

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { createTrustedHeaderAuth, TAILSCALE_HEADER_PROFILE } from '../src/auth/trusted-header.mjs'
 import { authorizeRequest } from '../src/core/authorize.mjs'
 import { assertSafeConfig } from '../src/core/config.mjs'
-import { GATEWAY_HOST, UPSTREAM_AUTHORITY, UPSTREAM_ORIGIN } from '../src/core/constants.mjs'
+import { GATEWAY_HOST, LOGIN_PATH, READINESS_PATH, SESSION_COOKIE_NAME, UPSTREAM_AUTHORITY, UPSTREAM_ORIGIN } from '../src/core/constants.mjs'
 import { rewriteDownstreamHeaders, rewriteUpstreamHeaders, rewriteWebSocketHeaders } from '../src/core/headers.mjs'
 import { normalizedProxyPath } from '../src/core/origin.mjs'
 import { OPERATOR_LOGIN, rawHeaders, request, TAILSCALE_ORIGIN, tailscaleConfig } from './helpers.mjs'
@@ -76,7 +76,7 @@ test('HTTP upstream header rewrite removes client credentials, identity, and pro
     host: 'gateway.example-tailnet.ts.net:8443',
     origin: TAILSCALE_ORIGIN,
     authorization: 'Bearer browser-token',
-    cookie: '__Host-dsh-gateway-session=abc; session=browser-cookie',
+    cookie: `${SESSION_COOKIE_NAME}=abc; session=browser-cookie`,
     forwarded: 'for=203.0.113.1',
     'x-forwarded-for': '203.0.113.1',
     'x-api-key': 'do-not-forward',
@@ -150,7 +150,7 @@ test('auth exceptions become denial, never anonymous success', async () => {
 test('reserved gateway paths are not proxied to DSH', async () => {
   const safe = config()
   const auth = authFor(safe)
-  assert.equal((await authorizeRequest(request({ url: '/.dsh-gateway/ready' }), safe, auth)).ok, false)
-  assert.equal((await authorizeRequest(request({ url: '/.dsh-gateway/login' }), safe, auth)).ok, false)
+  assert.equal((await authorizeRequest(request({ url: READINESS_PATH }), safe, auth)).ok, false)
+  assert.equal((await authorizeRequest(request({ url: LOGIN_PATH }), safe, auth)).ok, false)
   void GATEWAY_HOST
 })
