@@ -1,4 +1,4 @@
-# DSH Gateway
+# DSH One Gateway
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c1.svg" alt="MIT license"></a>
@@ -33,7 +33,7 @@ HTTP/WebSocket proxy, and a single onboarding command that previews a plan and
 refuses public or anonymous defaults. Installing the plugin does nothing until
 you run setup.
 
-The CLI and plugin are named `dsh-gateway`.
+The full command is `dsh-one-gateway`; a shorter `dsh-gateway` alias is installed too, for typing convenience.
 
 ## How this is different
 
@@ -96,7 +96,7 @@ DSH).
    state. Nothing is exposed until you run setup.
 
    ```sh
-   dsh plugin --profile web add -w /path/to/dsh-gateway
+   dsh plugin --profile web add -w /path/to/dsh-one-gateway
    ```
 
 2. **Run guided setup and confirm the displayed plan.**
@@ -152,9 +152,9 @@ fixed provider; you cannot mix them.
 
 ```sh
 dsh-gateway doctor
-dsh-gateway credential issue --store /path/to/dsh-gateway/credentials.json --name operator-1
-dsh-gateway credential list --store /path/to/dsh-gateway/credentials.json
-dsh-gateway credential revoke --store /path/to/dsh-gateway/credentials.json --name operator-1
+dsh-gateway credential issue --store /path/to/dsh-one-gateway/credentials.json --name operator-1
+dsh-gateway credential list --store /path/to/dsh-one-gateway/credentials.json
+dsh-gateway credential revoke --store /path/to/dsh-one-gateway/credentials.json --name operator-1
 ```
 
 Disable by setting `enabled: false` on the generated profile entry and

@@ -51,7 +51,7 @@ and readiness fail closed. A provider key outage intentionally denies access.
 
 If a gateway credential may be stolen:
 
-1. `dsh-gateway credential revoke --store /path/to/dsh-gateway/credentials.json --name operator-1`
+1. `dsh-gateway credential revoke --store /path/to/dsh-one-gateway/credentials.json --name operator-1`
 2. Restart the DSH Web sidecar so in-memory sessions drop.
 3. Issue a replacement credential. The raw secret is shown once and is never
    stored.

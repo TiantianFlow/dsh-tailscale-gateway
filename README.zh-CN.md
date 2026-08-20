@@ -1,4 +1,4 @@
-# DSH 网关
+# DSH One Gateway
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c1.svg" alt="MIT license"></a>
@@ -34,7 +34,7 @@ Cloudflare Access 的 Cloudflare Tunnel）只负责把请求送到本机。加�
 一条会预览计划并拒绝公开/匿名默认值的引导命令。只安装插件不会做任何事，直到你
 运行 setup。
 
-CLI 与插件名是 `dsh-gateway`。
+完整命令是 `dsh-one-gateway`；同时安装较短的 `dsh-gateway` 别名，方便输入。
 
 ## 和同类插件的差别
 
@@ -89,7 +89,7 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
    都不会暴露出去。
 
    ```sh
-   dsh plugin --profile web add -w /path/to/dsh-gateway
+   dsh plugin --profile web add -w /path/to/dsh-one-gateway
    ```
 
 2. **运行引导 setup，并确认显示的计划。**
@@ -140,9 +140,9 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
 
 ```sh
 dsh-gateway doctor
-dsh-gateway credential issue --store /path/to/dsh-gateway/credentials.json --name operator-1
-dsh-gateway credential list --store /path/to/dsh-gateway/credentials.json
-dsh-gateway credential revoke --store /path/to/dsh-gateway/credentials.json --name operator-1
+dsh-gateway credential issue --store /path/to/dsh-one-gateway/credentials.json --name operator-1
+dsh-gateway credential list --store /path/to/dsh-one-gateway/credentials.json
+dsh-gateway credential revoke --store /path/to/dsh-one-gateway/credentials.json --name operator-1
 ```
 
 把生成条目的 `enabled: false` 并重启 DSH 即可停用。卸载**不会**删除 Tailscale

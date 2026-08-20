@@ -1,6 +1,6 @@
 # Contributing
 
-This package is a private, zero-trust DSH gateway. Changes must preserve the
+This package is a private, zero-trust DSH One Gateway. Changes must preserve the
 invariants in the README.
 
 ## Invariants to preserve
