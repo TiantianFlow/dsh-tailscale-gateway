@@ -29,6 +29,23 @@ loopback-only HTTP/WebSocket proxy, and a single onboarding command that
 previews a plan and refuses public or anonymous defaults. Installing the bundle
 alone does nothing.
 
+## How this is different
+
+Other DSH gateways often bind the LAN, put a login page in front of DSH, or wrap
+a public tunnel. This plugin is a different contract:
+
+1. **We do not trust the LAN.** Binding `0.0.0.0` or treating RFC1918 as an allow
+   is out of scope. The listener stays on loopback. Being on the same Wi-Fi,
+   tailnet, or mesh is not authorization.
+2. **We do not ship a login page as the trust root.** Password forms, shared
+   tokens, and session-cookie doors are a large auth surface and a common source
+   of bugs. v1 identity comes from the provider: Serve's `Tailscale-User-Login`,
+   or a locally verified Access JWT. We check an allowlist. We do not ask you to
+   invent a password.
+3. **We unify private-network providers behind one plugin.** One onboarding CLI,
+   one loopback gateway, one allowlist. Tailscale Serve and Cloudflare
+   Tunnel+Access are v1. A new provider is another adapter, not another product.
+
 ## Non-goals
 
 - Making DSH itself multi-tenant, or reducing the privileges of an allowlisted
