@@ -1,0 +1,20 @@
+# Package managers and test output
+node_modules/
+.pnpm-store/
+coverage/
+*.log
+
+# Local editor and operating-system state
+.DS_Store
+.idea/
+.vscode/
+
+# Never commit personal DSH, provider, or secret material
+.dsh/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+credentials.json
