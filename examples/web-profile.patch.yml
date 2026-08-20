@@ -1,0 +1,19 @@
+# Guided setup is the supported onboarding path:
+#   dsh plugin --profile web exec dsh-gateway -- setup --provider tailscale-serve
+#
+# The gateway listener is fixed at 127.0.0.1:3088 and forwards only to the
+# local DSH Web server at 127.0.0.1:3080. Do not add listener or upstream
+# settings: the bundle rejects them to prevent accidental exposure.
+#
+# Tailscale Serve example (placeholders only):
+- id: dsh-gateway
+  config:
+    enabled: true
+    externalOrigin: 'https://gateway.example-tailnet.ts.net:8443'
+    provider:
+      type: tailscale-serve
+      routeManagement: ensure
+    auth:
+      mode: trusted-header
+      trustedPrincipals:
+        - 'login:operator@example.invalid'
