@@ -1,4 +1,3 @@
-import { isAbsolute } from 'node:path'
 import {
   GATEWAY_HOST,
   GATEWAY_PORT,
@@ -8,39 +7,14 @@ import {
   TAILSCALE_PROFILE_ID,
 } from '../core/constants.mjs'
 import { httpsPortFromOrigin } from '../core/origin.mjs'
-import { resultOrThrow, runArgvCommand } from './command.mjs'
-
-function isRecord(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function readableError(error) {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function statusAuthorityPort(authority) {
-  if (typeof authority !== 'string' || authority.length === 0) return undefined
-  try {
-    const url = new URL(`https://${authority}`)
-    if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) return undefined
-    return url.port === '' ? 443 : Number(url.port)
-  } catch {
-    return undefined
-  }
-}
-
-function funnelEnabledForRoute(status, authority, port) {
-  for (const field of ['AllowFunnel', '#AllowFunnel', 'Funnel']) {
-    const configured = status[field]
-    if (configured === true) return true
-    if (Array.isArray(configured) && configured.some(value => value === authority || value === String(port))) return true
-    if (!isRecord(configured)) continue
-    for (const [key, value] of Object.entries(configured)) {
-      if ((key === authority || key === String(port) || statusAuthorityPort(key) === port) && value) return true
-    }
-  }
-  return false
-}
+import { runArgvCommand } from './command.mjs'
+import {
+  funnelEnabledForRoute,
+  invokeTailscale,
+  isRecord,
+  parseServeStatusJson,
+  statusAuthorityPort,
+} from './tailscale-status.mjs'
 
 export function tailscaleServeRoute(externalOrigin) {
   const url = new URL(externalOrigin)
@@ -99,24 +73,6 @@ export function classifyServeStatus(status, externalOrigin) {
   return { kind: 'exact', route }
 }
 
-async function invoke(run, binary, argv, action) {
-  let result
-  try {
-    result = await run(binary, argv)
-  } catch (error) {
-    throw new Error(`Tailscale ${action} could not run: ${readableError(error)}`)
-  }
-  return resultOrThrow(result, `Tailscale ${action}`)
-}
-
-function parseStatus(text) {
-  try {
-    return JSON.parse(text)
-  } catch {
-    throw new Error('Tailscale Serve status is not valid JSON')
-  }
-}
-
 export const tailscaleServeProvider = {
   id: PROVIDER_TAILSCALE,
   identityCapability() {
@@ -126,13 +82,13 @@ export const tailscaleServeProvider = {
     return ['tailscale']
   },
   async inspect(config, runtime = {}) {
-    const binary = runtime.tailscaleBinary
-    const run = runtime.run ?? runArgvCommand
-    if (typeof binary !== 'string' || !isAbsolute(binary)) {
-      throw new Error('Tailscale CLI path was not supplied as an absolute executable')
-    }
-    const result = await invoke(run, binary, ['serve', 'status', '--json'], 'Serve status inspection')
-    return classifyServeStatus(parseStatus(result.stdout), config.externalOrigin)
+    const result = await invokeTailscale(
+      runtime.run ?? runArgvCommand,
+      runtime.tailscaleBinary,
+      ['serve', 'status', '--json'],
+      'Serve status inspection',
+    )
+    return classifyServeStatus(parseServeStatusJson(result.stdout), config.externalOrigin)
   },
   plan(config, observed) {
     if (observed.kind === 'exact') {
@@ -161,13 +117,13 @@ export const tailscaleServeProvider = {
   async apply(config, plan, runtime = {}) {
     if (plan.kind === 'unchanged') return { action: 'unchanged', route: plan.receipt.route }
     if (plan.kind === 'conflict') throw new Error(`Tailscale Serve conflict: ${plan.reason}. Refusing to overwrite it.`)
-    const binary = runtime.tailscaleBinary
-    const run = runtime.run ?? runArgvCommand
-    if (typeof binary !== 'string' || !isAbsolute(binary)) {
-      throw new Error('Tailscale CLI path was not supplied as an absolute executable')
-    }
     const operation = plan.operations[0]
-    await invoke(run, binary, operation.argv, `Serve configuration for ${plan.receipt.route.authority}`)
+    await invokeTailscale(
+      runtime.run ?? runArgvCommand,
+      runtime.tailscaleBinary,
+      operation.argv,
+      `Serve configuration for ${plan.receipt.route.authority}`,
+    )
     return { action: 'configured', route: plan.receipt.route }
   },
   async verify(config, runtime = {}) {

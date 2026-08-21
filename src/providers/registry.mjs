@@ -1,10 +1,18 @@
-import { COMPATIBILITY, PROVIDER_CLOUDFLARE, PROVIDER_EASYTIER, PROVIDER_TAILSCALE } from '../core/constants.mjs'
+import {
+  COMPATIBILITY,
+  PROVIDER_CLOUDFLARE,
+  PROVIDER_EASYTIER,
+  PROVIDER_HEADSCALE_TCP_SERVE,
+  PROVIDER_TAILSCALE,
+} from '../core/constants.mjs'
 import { cloudflareAccessProvider } from './cloudflare-access.mjs'
+import { headscaleTcpServeProvider } from './headscale-tcp-serve.mjs'
 import { tailscaleServeProvider } from './tailscale-serve.mjs'
 
 const PROVIDERS = Object.freeze({
   [PROVIDER_TAILSCALE]: tailscaleServeProvider,
   [PROVIDER_CLOUDFLARE]: cloudflareAccessProvider,
+  [PROVIDER_HEADSCALE_TCP_SERVE]: headscaleTcpServeProvider,
 })
 
 export function getProvider(type) {

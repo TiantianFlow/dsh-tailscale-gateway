@@ -36,6 +36,7 @@ export const MAX_COMMAND_OUTPUT_BYTES = 256 * 1024
 
 export const PROVIDER_TAILSCALE = 'tailscale-serve'
 export const PROVIDER_CLOUDFLARE = 'cloudflare-access'
+export const PROVIDER_HEADSCALE_TCP_SERVE = 'headscale-tcp-serve'
 export const PROVIDER_EASYTIER = 'easytier'
 
 export const AUTH_TRUSTED_HEADER = 'trusted-header'
@@ -60,5 +61,10 @@ export const COMPATIBILITY = Object.freeze({
     identityKind: 'signed-jwt',
     profileId: CLOUDFLARE_PROFILE_ID,
     principalNamespace: 'email',
+  }),
+  [PROVIDER_HEADSCALE_TCP_SERVE]: Object.freeze({
+    authMode: AUTH_GATEWAY_CREDENTIAL,
+    identityKind: 'none',
+    principalNamespace: 'credential',
   }),
 })
