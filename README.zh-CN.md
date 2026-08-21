@@ -101,6 +101,12 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
 
 2. **运行引导 setup，并确认显示的计划。**
 
+   在终端里省略 `--provider` 会打开一个两项菜单，选择 Tailscale Serve 或
+   Cloudflare Access。检测到本地可执行文件只是提示；当恰好检测到一个入口时，
+   它会成为默认值——不是配置校验。传入 `--provider` 可跳过菜单。非交互
+   setup 在恰好检测到一个入口可执行文件时仍会自动选择，否则必须提供
+   `--provider`。
+
    Tailscale Serve：
 
    ```sh
@@ -118,13 +124,19 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
      --trusted-principal 'email:operator@example.invalid'
    ```
 
+   在 TTY 中，未提供的 Cloudflare 值会按此顺序交互收集：已有 Access origin、
+   团队 origin、应用 audience、受信任邮箱。无人值守的 `--yes` 仍必须提供全部
+   四个标志。setup 不会创建隧道、DNS 记录或 Access 应用。
+
    确认后才会写入启用的 profile 条目。setup 不会猜测、杀死或重启你的
    supervisor。请自行重启你已经在用的 DSH Web 进程。
 
 3. **以允许名单中的主体打开配置的 HTTPS origin。** 3088 端口本身从局域网和
    入口网络都不可达。
 
-用 `--print` 只预览不写入。非交互 `--yes` 必须显式提供所有安全敏感值。
+用 `--print` 只预览不写入。在 TTY 中，`--print` 仍可能询问入口和缺失值，但
+绝不会写入 profile、入口资源或凭证。非交互 `--yes` 必须显式提供所有安全敏感
+值。`--yes` 只跳过最后的写入确认，不会替你发明入口或 Cloudflare 参数。
 
 ## 每种认证模式证明什么
 

@@ -27,7 +27,7 @@ export function selectProvider(detected, requested) {
   }
   if (detected.length === 1) return detected[0].id
   if (detected.length === 0) {
-    throw new Error('dsh-one-gateway: no provider executable was detected; pass --provider tailscale-serve or --provider cloudflare-access')
+    throw new Error('dsh-one-gateway: no provider executable was detected; non-interactive setup requires --provider tailscale-serve or --provider cloudflare-access')
   }
-  throw new Error('dsh-one-gateway: multiple providers were detected; pass --provider tailscale-serve or --provider cloudflare-access')
+  throw new Error('dsh-one-gateway: multiple providers were detected; non-interactive setup requires --provider tailscale-serve or --provider cloudflare-access')
 }

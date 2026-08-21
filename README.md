@@ -113,6 +113,13 @@ DSH).
 
 2. **Run guided setup and confirm the displayed plan.**
 
+   In a terminal, omit `--provider` to choose Tailscale Serve or Cloudflare
+   Access from a two-item menu. Detection of a local executable is a hint and,
+   when exactly one provider is found, a default — not a configuration check.
+   Pass `--provider` to skip the menu. Non-interactive setup still auto-selects
+   when exactly one provider executable is detected, and otherwise requires
+   `--provider`.
+
    Tailscale Serve:
 
    ```sh
@@ -131,14 +138,22 @@ DSH).
      --trusted-principal 'email:operator@example.invalid'
    ```
 
+   In a TTY, omitted Cloudflare values are collected interactively in this
+   order: existing Access origin, team origin, application audience, trusted
+   email. Unattended `--yes` still requires all four flags. Setup never creates
+   a tunnel, DNS record, or Access application.
+
    Confirmation writes an enabled profile entry. Setup never guesses, kills, or
    restarts your supervisor. Restart the DSH Web process you already own.
 
 3. **Open the configured HTTPS origin as an allowlisted principal.** Port 3088
    itself remains unreachable from the LAN and from the provider network.
 
-Use `--print` to preview without writing. Non-interactive `--yes` requires every
-security-sensitive value to be supplied explicitly.
+Use `--print` to preview without writing. In a TTY, `--print` may still prompt
+for a provider and missing values, but it never writes a profile, provider
+resource, or credential. Non-interactive `--yes` requires every
+security-sensitive value to be supplied explicitly. `--yes` skips only the
+final write confirmation; it does not invent a provider or Cloudflare values.
 
 ## What each auth mode proves
 

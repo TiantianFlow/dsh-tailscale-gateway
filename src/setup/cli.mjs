@@ -13,7 +13,7 @@ import { probeAccessAttachment } from '../providers/cloudflare-access.mjs'
 import { detectProviders, selectProvider } from './detect.mjs'
 import { createCloudflarePlan, createTailscalePlan, describePlan } from './plan.mjs'
 import { renderProfileEntry, writeInitialProfileEntry } from './profile.mjs'
-import { ask, confirmWrite, isInteractive } from './prompts.mjs'
+import { ask, askRequired, chooseProvider, confirmWrite, isInteractive } from './prompts.mjs'
 
 export const DEFAULT_DSH_HOME = process.env.DSH_HOME || join(homedir(), '.dsh')
 export const DEFAULT_PROFILE = join(DEFAULT_DSH_HOME, 'profiles', 'web', 'cordis.patch.yml')
@@ -30,6 +30,9 @@ export function usage() {
 
 Private, zero-trust dsh-one-gateway onboarding. Setup previews a plan, refuses
 public/anonymous defaults, and writes a profile entry only after confirmation.
+Omitting --provider in a TTY opens a menu to choose Tailscale Serve or
+Cloudflare Access. Non-interactive setup still requires --provider when zero
+or multiple providers are detected.
 `
 }
 
@@ -89,15 +92,44 @@ async function buildTailscalePlan(options, io, deps) {
   return createTailscalePlan(status, serve, { trustedLogin: login })
 }
 
-async function buildCloudflarePlan(options, deps) {
-  if (!options.externalOrigin || !options.teamOrigin || !options.applicationAudience || !options.trustedPrincipal) {
+export async function resolveSetupProvider(options, detected, io) {
+  if (options.provider) {
+    return { ...options, provider: selectProvider(detected, options.provider) }
+  }
+  if (isInteractive(io)) {
+    return { ...options, provider: await chooseProvider(detected, io) }
+  }
+  return { ...options, provider: selectProvider(detected) }
+}
+
+async function buildCloudflarePlan(options, io, deps) {
+  const collected = { ...options }
+  if (isInteractive(io)) {
+    io.stdout.write(
+      'Cloudflare setup is verify-only. It will not create a tunnel, DNS record, or Access application.\n' +
+      'Use an existing Access-protected HTTPS application.\n',
+    )
+    if (!collected.externalOrigin) {
+      collected.externalOrigin = await askRequired('Existing Access application origin (HTTPS): ', io)
+    }
+    if (!collected.teamOrigin) {
+      collected.teamOrigin = await askRequired('Cloudflare Access team origin (HTTPS): ', io)
+    }
+    if (!collected.applicationAudience) {
+      collected.applicationAudience = await askRequired('Cloudflare Access application audience (aud): ', io)
+    }
+    if (!collected.trustedPrincipal) {
+      collected.trustedPrincipal = await askRequired('Trusted Cloudflare Access email: ', io)
+    }
+  }
+  if (!collected.externalOrigin || !collected.teamOrigin || !collected.applicationAudience || !collected.trustedPrincipal) {
     throw new Error('cloudflare-access setup requires --external-origin, --team-origin, --application-audience, and --trusted-principal')
   }
   const plan = createCloudflarePlan({
-    externalOrigin: options.externalOrigin,
-    teamOrigin: options.teamOrigin,
-    applicationAudience: options.applicationAudience,
-    trustedEmail: options.trustedPrincipal,
+    externalOrigin: collected.externalOrigin,
+    teamOrigin: collected.teamOrigin,
+    applicationAudience: collected.applicationAudience,
+    trustedEmail: collected.trustedPrincipal,
   })
   await deps.fetchJwks(plan.config.provider.teamOrigin)
   const probe = await deps.probeAccess(plan.externalOrigin)
@@ -113,10 +145,10 @@ export async function setupCommand(options, io, deps = {}) {
     writeProfile: deps.writeProfile ?? writeInitialProfileEntry,
   }
   const detected = resolved.detect()
-  const provider = selectProvider(detected, options.provider)
-  const plan = provider === PROVIDER_TAILSCALE
-    ? await buildTailscalePlan(options, io, resolved)
-    : await buildCloudflarePlan(options, resolved)
+  const setupOptions = await resolveSetupProvider(options, detected, io)
+  const plan = setupOptions.provider === PROVIDER_TAILSCALE
+    ? await buildTailscalePlan(setupOptions, io, resolved)
+    : await buildCloudflarePlan(setupOptions, io, resolved)
   const entry = renderProfileEntry(plan.config)
   io.stdout.write(`\n${describePlan(plan)}\n`)
   if (plan.probe) io.stdout.write(`Access probe: ${plan.probe.kind}. ${plan.probe.reason}\n`)
