@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BASELINE_INSTANCE_ID, PACKAGE_NAME, USER_INSTANCE_ID } from '../src/core/constants.mjs'
-import { detectProviders, selectProvider } from '../src/setup/detect.mjs'
+import { classifyControlPlane, detectProviders, refineDetectedProviders, selectProvider } from '../src/setup/detect.mjs'
 import { parseArgs } from '../src/setup/cli.mjs'
 import {
   createCloudflarePlan,
+  createHeadscaleTcpPlan,
   createTailscalePlan,
+  inferHeadscaleNode,
   inferNodeIdentity,
   selectInitialOrigin,
+  selectTcpOrigin,
 } from '../src/setup/plan.mjs'
 import { appendProfileEntry, renderProfileEntry } from '../src/setup/profile.mjs'
 import { APPLICATION_AUDIENCE, TEAM_ORIGIN } from './helpers.mjs'
@@ -135,7 +138,74 @@ test('provider detection handles zero, one, and multiple executables', () => {
     { id: 'cloudflare-access' },
   ]), /multiple providers/)
   assert.equal(selectProvider([], 'cloudflare-access'), 'cloudflare-access')
-  assert.throws(() => selectProvider([], 'easytier'), /tailscale-serve or cloudflare-access/)
+  assert.equal(selectProvider([], 'headscale-tcp-serve'), 'headscale-tcp-serve')
+  assert.throws(() => selectProvider([], 'easytier'), /tailscale-serve, cloudflare-access, or headscale-tcp-serve/)
+})
+
+function headscaleStatus(overrides = {}) {
+  return {
+    BackendState: 'Running',
+    Self: {
+      DNSName: 'gateway.example.invalid.',
+      UserID: 7,
+    },
+    CurrentTailnet: { MagicDNSSuffix: 'example.invalid' },
+    User: { 7: { LoginName: 'owner@example.invalid' } },
+    ...overrides,
+  }
+}
+
+test('control-plane classification distinguishes Tailscale.com from Headscale using live node facts', () => {
+  assert.equal(classifyControlPlane(tailscaleStatus()).kind, 'official')
+  assert.equal(classifyControlPlane(headscaleStatus()).kind, 'headscale')
+  assert.equal(classifyControlPlane(headscaleStatus({ BackendState: 'Stopped' })).kind, 'disconnected')
+  assert.equal(classifyControlPlane({}).kind, 'unknown')
+  assert.deepEqual(
+    refineDetectedProviders([{ id: 'tailscale-serve', reason: 'exe' }], { kind: 'headscale' }),
+    [{ id: 'headscale-tcp-serve', reason: 'tailscale executable is present on a Headscale control plane' }],
+  )
+  assert.deepEqual(
+    refineDetectedProviders([{ id: 'headscale-tcp-serve', reason: 'exe' }], { kind: 'official' }),
+    [{ id: 'tailscale-serve', reason: 'tailscale executable is present on Tailscale.com' }],
+  )
+})
+
+test('Headscale TCP plan selects an exact or absent port and writes closed TLS plus credential store paths', () => {
+  const exact = {
+    TCP: { '8443': { TCPForward: '127.0.0.1:3088' } },
+  }
+  assert.deepEqual(selectTcpOrigin('gateway.example.invalid', exact, [443, 8443]), {
+    externalOrigin: 'https://gateway.example.invalid:8443',
+    routeState: 'exact',
+  })
+  const plan = createHeadscaleTcpPlan(headscaleStatus(), {}, {
+    ports: [443, 8443],
+    tlsCertPath: '/path/to/dsh-one-gateway/cert.pem',
+    tlsKeyPath: '/path/to/dsh-one-gateway/key.pem',
+    credentialStorePath: '/path/to/dsh-one-gateway/credentials.json',
+  })
+  assert.equal(plan.provider, 'headscale-tcp-serve')
+  assert.equal(plan.externalOrigin, 'https://gateway.example.invalid')
+  assert.equal(plan.trustedPrincipal, 'credential:operator-1')
+  assert.equal(plan.routeState, 'absent')
+  assert.match(plan.notes.join('\n'), /no user identity/)
+  assert.match(plan.notes.join('\n'), /does not generate a CA/)
+  assert.match(plan.notes.join('\n'), /tailscale serve --tcp 443 --bg tcp:\/\/127\.0\.0\.1:3088/)
+  const entry = renderProfileEntry(plan.config)
+  assert.match(entry, /type: headscale-tcp-serve/)
+  assert.match(entry, /mode: gateway-credential/)
+  assert.match(entry, /credentialStorePath: '\/path\/to\/dsh-one-gateway\/credentials\.json'/)
+  assert.match(entry, /certPath: '\/path\/to\/dsh-one-gateway\/cert\.pem'/)
+  assert.match(entry, /keyPath: '\/path\/to\/dsh-one-gateway\/key\.pem'/)
+  assert.doesNotMatch(entry, /secret/i)
+  assert.throws(() => inferHeadscaleNode(tailscaleStatus()), /tailscale-serve/)
+  assert.throws(() => inferHeadscaleNode(headscaleStatus({
+    Self: { DNSName: 'gateway.example.invalid.', UserID: 7, Tags: ['tag:server'] },
+  })), /tagged/)
+  assert.throws(() => createHeadscaleTcpPlan(headscaleStatus(), {}, {
+    tlsCertPath: '/path/to/dsh-one-gateway/cert.pem',
+    tlsKeyPath: '/path/to/dsh-one-gateway/key.pem',
+  }), /credential-store/)
 })
 
 test('non-TTY without complete flags refuses, and --print does not write', async () => {

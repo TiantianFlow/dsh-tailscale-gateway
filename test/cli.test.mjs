@@ -259,17 +259,17 @@ test('explicit --provider suppresses the TTY provider menu', { timeout: 5_000 },
 test('EOF before a provider selection fails without planning or writing', { timeout: 5_000 }, async () => {
   const io = collectTtyIo([null])
   let written = false
-  let inspected = false
+  let planned = false
   await assert.rejects(main(['setup'], io, {
     detect: () => [{ id: 'tailscale-serve' }],
     tailscaleJson: argv => {
-      inspected = true
+      if (argv[0] === 'serve') planned = true
       return tailscaleJson(argv)
     },
     writeProfile: async () => { written = true },
   }), /setup ended before a provider was selected; rerun with --provider tailscale-serve or --provider cloudflare-access/)
   assert.equal(written, false)
-  assert.equal(inspected, false)
+  assert.equal(planned, false)
 })
 
 test('Tailscale TTY empty login keeps the inferred owner', { timeout: 5_000 }, async () => {
@@ -477,7 +477,7 @@ test('unsupported provider spellings stay rejected, including with --print', asy
     await assert.rejects(main(['setup', '--print', '--provider', provider], io, {
       detect: () => [],
       writeProfile: mustNotWrite(),
-    }), /tailscale-serve or cloudflare-access/)
+    }), /tailscale-serve, cloudflare-access, or headscale-tcp-serve/)
   }
 })
 
@@ -508,4 +508,204 @@ test('TTY --yes still collects omitted values and skips only the write confirmat
   assert.equal(writes, 1)
   assert.match(stdout, /Select the ingress provider/)
   assert.doesNotMatch(stdout, /Write this profile entry/)
+})
+
+function headscaleStatus() {
+  return {
+    BackendState: 'Running',
+    Self: { DNSName: 'gateway.example.invalid.', UserID: 1 },
+    CurrentTailnet: { MagicDNSSuffix: 'example.invalid' },
+  }
+}
+
+function headscaleJson(argv) {
+  return argv[0] === 'status' ? headscaleStatus() : {}
+}
+
+function headscaleFlags() {
+  return [
+    '--tls-cert', '/path/to/dsh-one-gateway/cert.pem',
+    '--tls-key', '/path/to/dsh-one-gateway/key.pem',
+    '--credential-store', '/path/to/dsh-one-gateway/credentials.json',
+    '--trusted-principal', 'operator-1',
+  ]
+}
+
+test('official Tailscale TTY menu does not offer headscale-tcp-serve as an equal choice', { timeout: 5_000 }, async () => {
+  const io = collectTtyIo(['', ''])
+  const result = await main(['setup', '--print'], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson,
+    writeProfile: mustNotWrite(),
+  })
+  const { stdout } = io.read()
+  assert.match(stdout, /1\) Tailscale Serve — private Serve ingress with Tailscale user identity/)
+  assert.doesNotMatch(stdout, /Headscale TCP Serve/)
+  assert.match(stdout, /stronger Tailscale Serve identity path/)
+  assert.equal(result.plan.provider, 'tailscale-serve')
+})
+
+test('Headscale live facts replace Tailscale Serve with TCP Serve on the TTY menu', { timeout: 5_000 }, async () => {
+  const io = collectTtyIo(['', ...[
+    '/path/to/dsh-one-gateway/cert.pem',
+    '/path/to/dsh-one-gateway/key.pem',
+    '/path/to/dsh-one-gateway/credentials.json',
+    '',
+  ]])
+  let issued = false
+  const result = await main(['setup', '--print'], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson: headscaleJson,
+    issueCredential: async () => { issued = true; throw new Error('must not issue') },
+    writeProfile: mustNotWrite(),
+  })
+  const { stdout } = io.read()
+  assert.match(stdout, /1\) Headscale TCP Serve — private TCP reachability plus a gateway credential/)
+  assert.doesNotMatch(stdout, /Tailscale Serve — private Serve ingress/)
+  assert.equal(result.plan.provider, 'headscale-tcp-serve')
+  assert.equal(result.written, false)
+  assert.equal(issued, false)
+  assert.doesNotMatch(stdout, /Issued credential:/)
+})
+
+test('Headscale --print never issues a credential or writes the profile', async () => {
+  const io = collectIo({ denyStdin: true })
+  let issued = false
+  let written = false
+  const result = await main([
+    'setup', '--print', '--provider', 'headscale-tcp-serve',
+    ...headscaleFlags(),
+  ], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson: headscaleJson,
+    issueCredential: async () => { issued = true; throw new Error('must not issue') },
+    writeProfile: async () => { written = true },
+  })
+  assert.equal(result.written, false)
+  assert.equal(issued, false)
+  assert.equal(written, false)
+  const { stdout } = io.read()
+  assert.match(stdout, /Provider: headscale-tcp-serve/)
+  assert.match(stdout, /no user identity/)
+  assert.doesNotMatch(stdout, /Issued /)
+})
+
+test('Headscale --yes issues a credential after confirm then writes the profile', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-one-gateway-hs-setup-'))
+  const store = join(directory, 'credentials.json')
+  const io = collectIo({ denyStdin: true })
+  let writes = 0
+  const result = await main([
+    'setup', '--yes', '--provider', 'headscale-tcp-serve',
+    '--tls-cert', '/path/to/dsh-one-gateway/cert.pem',
+    '--tls-key', '/path/to/dsh-one-gateway/key.pem',
+    '--credential-store', store,
+    '--trusted-principal', 'operator-1',
+  ], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson: headscaleJson,
+    writeProfile: async () => { writes += 1 },
+  })
+  assert.equal(result.written, true)
+  assert.equal(writes, 1)
+  assert.match(result.issued.secret, /^[A-Za-z0-9_-]{43}$/)
+  const { stdout } = io.read()
+  assert.match(stdout, /Issued credential:operator-1/)
+  assert.match(stdout, new RegExp(result.issued.secret))
+  assert.doesNotMatch(result.entry, new RegExp(result.issued.secret))
+})
+
+test('Headscale profile-write failure rolls back the credential store', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-one-gateway-hs-rollback-'))
+  const store = join(directory, 'credentials.json')
+  const io = collectIo({ denyStdin: true })
+  await assert.rejects(main([
+    'setup', '--yes', '--provider', 'headscale-tcp-serve',
+    '--tls-cert', '/path/to/dsh-one-gateway/cert.pem',
+    '--tls-key', '/path/to/dsh-one-gateway/key.pem',
+    '--credential-store', store,
+    '--trusted-principal', 'operator-1',
+  ], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson: headscaleJson,
+    writeProfile: async () => { throw new Error('profile exploded') },
+  }), /credential store rolled back/)
+  await assert.rejects(main(['credential', 'list', '--store', store], collectIo()))
+})
+
+test('explicit headscale-tcp-serve on Tailscale.com warns about the weaker path', async () => {
+  const io = collectIo({ denyStdin: true })
+  const result = await main([
+    'setup', '--print', '--provider', 'headscale-tcp-serve',
+    ...headscaleFlags(),
+    '--external-origin', 'https://gateway.example-tailnet.ts.net:8443',
+  ], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson,
+    issueCredential: async () => { throw new Error('must not issue') },
+    writeProfile: mustNotWrite(),
+  })
+  const { stdout } = io.read()
+  assert.match(stdout, /stronger path/)
+  assert.equal(result.plan.provider, 'headscale-tcp-serve')
+  assert.equal(result.written, false)
+})
+
+test('official Tailscale TTY declines the weaker TCP Serve path without writing', { timeout: 5_000 }, async () => {
+  const io = collectTtyIo(['n'])
+  let issued = false
+  await assert.rejects(main([
+    'setup', '--provider', 'headscale-tcp-serve',
+    ...headscaleFlags(),
+  ], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson,
+    issueCredential: async () => { issued = true },
+    writeProfile: mustNotWrite(),
+  }), /weaker credential-only path/)
+  assert.equal(issued, false)
+})
+
+test('Headscale node rejects --provider tailscale-serve', async () => {
+  const io = collectIo({ denyStdin: true })
+  await assert.rejects(main([
+    'setup', '--print', '--provider', 'tailscale-serve',
+  ], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson: headscaleJson,
+    writeProfile: mustNotWrite(),
+  }), /Headscale control plane/)
+})
+
+test('doctor prints the live TCP Serve receipt', async () => {
+  const io = collectIo({ denyStdin: true })
+  await main(['doctor'], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson: argv => {
+      if (argv[0] === 'serve') {
+        return { TCP: { '8443': { TCPForward: '127.0.0.1:3088' } } }
+      }
+      return tailscaleStatus()
+    },
+  })
+  const { stdout } = io.read()
+  assert.match(stdout, /Control plane: official/)
+  assert.match(stdout, /TCP Serve handlers:/)
+  assert.match(stdout, /8443 TCPForward=127\.0\.0\.1:3088/)
+  assert.match(stdout, /TCP Serve Funnel: disabled/)
+})
+
+test('non-TTY Headscale --yes without TLS paths fails and does not issue', async () => {
+  const io = collectIo({ denyStdin: true })
+  let issued = false
+  await assert.rejects(main([
+    'setup', '--yes', '--provider', 'headscale-tcp-serve',
+    '--trusted-principal', 'operator-1',
+  ], io, {
+    detect: () => [{ id: 'tailscale-serve' }],
+    tailscaleJson: headscaleJson,
+    issueCredential: async () => { issued = true },
+    writeProfile: mustNotWrite(),
+  }), /--tls-cert/)
+  assert.equal(issued, false)
 })

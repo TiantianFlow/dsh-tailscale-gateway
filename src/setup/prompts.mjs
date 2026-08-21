@@ -1,9 +1,9 @@
 import { createInterface } from 'node:readline/promises'
-import { PROVIDER_CLOUDFLARE, PROVIDER_TAILSCALE } from '../core/constants.mjs'
+import { PROVIDER_CLOUDFLARE, PROVIDER_HEADSCALE_TCP_SERVE, PROVIDER_TAILSCALE } from '../core/constants.mjs'
 
 export const SETUP_EOF = 'SETUP_EOF'
 
-const PROVIDER_MENU = Object.freeze([
+const OFFICIAL_PROVIDER_MENU = Object.freeze([
   {
     key: '1',
     id: PROVIDER_TAILSCALE,
@@ -15,6 +15,23 @@ const PROVIDER_MENU = Object.freeze([
     label: 'Cloudflare Access — existing Access-protected application with signed identity',
   },
 ])
+
+const HEADSCALE_PROVIDER_MENU = Object.freeze([
+  {
+    key: '1',
+    id: PROVIDER_HEADSCALE_TCP_SERVE,
+    label: 'Headscale TCP Serve — private TCP reachability plus a gateway credential (no Serve identity)',
+  },
+  {
+    key: '2',
+    id: PROVIDER_CLOUDFLARE,
+    label: 'Cloudflare Access — existing Access-protected application with signed identity',
+  },
+])
+
+export function providerMenuItems(controlPlane) {
+  return controlPlane?.kind === 'headscale' ? HEADSCALE_PROVIDER_MENU : OFFICIAL_PROVIDER_MENU
+}
 
 function setupEofError(message) {
   const error = new Error(message)
@@ -65,20 +82,25 @@ export async function confirmWrite(options, io) {
   return /^y(?:es)?$/i.test(await ask('Write this profile entry and enable the gateway? [y/N] ', io))
 }
 
-export async function chooseProvider(detected, io) {
+export async function chooseProvider(detected, io, { controlPlane } = {}) {
+  const menu = providerMenuItems(controlPlane)
   const detectedIds = new Set((detected ?? []).map(item => item.id))
   const lines = [
     'Select the ingress provider to configure.',
     'Detection is a hint only; setup will still validate the selected provider.',
   ]
-  for (const item of PROVIDER_MENU) {
+  for (const item of menu) {
     lines.push(`  ${item.key}) ${item.label}${detectedIds.has(item.id) ? ' [detected]' : ''}`)
+  }
+  if (controlPlane?.kind === 'official') {
+    lines.push('This node is on Tailscale.com. Setup lists the stronger Tailscale Serve identity path, not the weaker credential-only TCP Serve mode.')
   }
   io.stdout.write(`${lines.join('\n')}\n`)
 
   const only = detected?.length === 1 ? detected[0].id : null
-  const defaultKey = PROVIDER_MENU.find(item => item.id === only)?.key ?? null
+  const defaultKey = menu.find(item => item.id === only)?.key ?? null
   const prompt = defaultKey ? `Provider [${defaultKey}]: ` : 'Provider (1-2): '
+  const eofProviders = menu.map(item => `--provider ${item.id}`).join(' or ')
 
   while (true) {
     let answer
@@ -86,25 +108,31 @@ export async function chooseProvider(detected, io) {
       answer = await ask(prompt, io)
     } catch (error) {
       if (error?.code === SETUP_EOF) {
-        throw setupEofError('dsh-one-gateway: setup ended before a provider was selected; rerun with --provider tailscale-serve or --provider cloudflare-access')
+        throw setupEofError(`dsh-one-gateway: setup ended before a provider was selected; rerun with ${eofProviders}`)
       }
       throw error
     }
     const selectedKey = answer === '' ? defaultKey : answer
-    const selected = PROVIDER_MENU.find(item => item.key === selectedKey)
+    const selected = menu.find(item => item.key === selectedKey)
     if (selected) return selected.id
     io.stdout.write('Invalid selection. Enter 1 or 2.\n')
   }
 }
 
-export async function askRequired(question, io) {
+export async function confirmWeakerAuth(io) {
+  return /^y(?:es)?$/i.test(await ask('Continue with the weaker credential-only TCP Serve path? [y/N] ', io))
+}
+
+export async function askRequired(question, io, {
+  eofMessage = 'dsh-one-gateway: setup ended before required Cloudflare values were collected; rerun with --external-origin, --team-origin, --application-audience, and --trusted-principal',
+} = {}) {
   while (true) {
     let value
     try {
       value = await ask(question, io)
     } catch (error) {
       if (error?.code === SETUP_EOF) {
-        throw setupEofError('dsh-one-gateway: setup ended before required Cloudflare values were collected; rerun with --external-origin, --team-origin, --application-audience, and --trusted-principal')
+        throw setupEofError(eofMessage)
       }
       throw error
     }

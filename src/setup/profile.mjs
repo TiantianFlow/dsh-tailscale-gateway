@@ -51,6 +51,7 @@ export function renderProfileEntry(config) {
     externalOrigin: config.externalOrigin,
     provider: userProvider(config.provider),
     auth: userAuth(config.auth),
+    ...(config.tls ? { tls: { certPath: config.tls.certPath, keyPath: config.tls.keyPath } } : {}),
     ...(config.activationToken ? { activationToken: config.activationToken } : {}),
   }
   const safe = assertSafeConfig(user)
@@ -72,10 +73,18 @@ export function renderProfileEntry(config) {
     lines.push(`          teamOrigin: ${yamlQuote(safe.provider.teamOrigin)}`)
     lines.push(`          applicationAudience: ${yamlQuote(safe.provider.applicationAudience)}`)
   }
+  if (safe.tls) {
+    lines.push('        tls:')
+    lines.push(`          certPath: ${yamlQuote(safe.tls.certPath)}`)
+    lines.push(`          keyPath: ${yamlQuote(safe.tls.keyPath)}`)
+  }
   lines.push('        auth:')
   lines.push(`          mode: ${safe.auth.mode}`)
   lines.push('          trustedPrincipals:')
   lines.push(yamlList(safe.auth.trustedPrincipals, '            '))
+  if (safe.auth.credentialStorePath) {
+    lines.push(`          credentialStorePath: ${yamlQuote(safe.auth.credentialStorePath)}`)
+  }
   if (safe.activationToken) {
     lines.push(`        activationToken: ${yamlQuote(safe.activationToken)}`)
   }
