@@ -46,6 +46,7 @@
     "gateway",
     "zero-trust",
     "tailscale",
+    "headscale",
     "cloudflare-access",
     "reverse-proxy",
     "websocket",

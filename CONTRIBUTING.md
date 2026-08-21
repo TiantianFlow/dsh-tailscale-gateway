@@ -30,8 +30,10 @@ An adapter evidence checklist is required:
 5. Teardown behavior (v1 does not auto-remove persistent routes).
 
 Do not add an arbitrary trusted-header profile. Do not add a public or
-anonymous provider mode. EasyTier remains out of v1 until overlay-only bind and
-post-verification evidence exists; do not add `providers/easytier.mjs`.
+anonymous provider mode. EasyTier, ZeroTier, and raw WireGuard remain out of
+v1 until live ingress inspection and post-verification evidence exist; do not
+add adapters for them. `headscale-tcp-serve` must stay a separate provider ID
+from `tailscale-serve`.
 
 ## Tests
 

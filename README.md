@@ -12,20 +12,22 @@
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plugin
 that puts a private, zero-trust gateway in front of DSH Web. Callers authenticate
-through Tailscale Serve or Cloudflare Access; one private allowlist decides who
-gets in, and there is no password for you to manage.
+through Tailscale Serve, Cloudflare Access, or — on Headscale — a generated
+gateway credential in front of private TCP Serve. One private allowlist decides
+who gets in. There is no user-chosen password to manage.
 
-The gateway and DSH stay on loopback. Tailscale Serve, or Cloudflare Tunnel with
-Cloudflare Access, is only the private ingress. Joining that private network is
-**never** an authorization decision. Every request must resolve one unambiguous,
-allowlisted principal before anything is forwarded to DSH. That is self-hosted
-access control for a zero trust homelab: reachability is not permission.
+The gateway and DSH stay on loopback. Tailscale Serve, Cloudflare Tunnel with
+Cloudflare Access, or Headscale via Tailscale TCP Serve is only the private
+ingress. Joining that private network is **never** an authorization decision.
+Every request must resolve one unambiguous, allowlisted principal before
+anything is forwarded to DSH. That is self-hosted access control for a zero
+trust homelab: reachability is not permission.
 
 ```text
-Allowlisted browser ─ HTTPS ─> provider ingress (Tailscale Serve or Cloudflare Access)
-                                      │
-                                      └─ identity-aware loopback gateway ─> local DSH
-                                         127.0.0.1:3088                127.0.0.1:3080
+Allowlisted browser ─ HTTPS ─> provider ingress (Tailscale Serve, Cloudflare Access,
+                                      │           or Headscale TCP Serve)
+                                      └─ loopback gateway ─> local DSH
+                                         127.0.0.1:3088   127.0.0.1:3080
 ```
 
 **What you get:** an exact principal allowlist in front of DSH, a loopback-only
@@ -49,21 +51,19 @@ a public tunnel. This plugin is a different contract:
    surface and a common source of bugs. Those two shipped modes use Serve's
    injected `Tailscale-User-Login`, or a locally verified Cloudflare Access
    JWT. We check an allowlist. We do not ask you to invent a password.
-   `gateway-credential` is a smaller, purpose-built login for transports with
-   no native identity: a generated per-principal credential (not a user-chosen
-   password), verifier-only storage, a bounded
-   `HttpOnly`/`Secure`/`SameSite=Strict` session, individual revocation, and
-   rate limiting without permanent lockout. Compared with a typical
-   user-chosen or shared password, that is stronger on guessability, storage
-   disclosure, and revocation; it is not "passwordless" and not a claim of
-   superiority over every password or passkey. This mode is fully implemented
-   and its browser login works, but no currently-shipped provider (Tailscale
-   Serve, Cloudflare Access) selects it — it's ready for a future
-   transport-only provider with no native identity of its own.
+    `gateway-credential` is a smaller, purpose-built login for transports with
+    no native identity: a generated per-principal credential (not a user-chosen
+    password), verifier-only storage, a bounded
+    `HttpOnly`/`Secure`/`SameSite=Strict` session, individual revocation, and
+    rate limiting without permanent lockout. Compared with a typical
+    user-chosen or shared password, that is stronger on guessability, storage
+    disclosure, and revocation; it is not "passwordless" and not a claim of
+    superiority over every password or passkey. Headscale TCP Serve is the
+    shipped transport that uses this mode.
 3. **One plugin, one onboarding command, one allowlist.** Instead of a different
-   bespoke setup per provider, Tailscale Serve and Cloudflare Tunnel with Access
-   share one loopback gateway. A new provider is another adapter, not another
-   product.
+    bespoke setup per provider, Tailscale Serve, Cloudflare Tunnel with Access,
+    and Headscale TCP Serve share one loopback gateway. A new provider is
+    another adapter, not another product.
 
 ## What this plugin does not do
 
@@ -86,6 +86,7 @@ a public tunnel. This plugin is a different contract:
 | --- | --- | --- | --- |
 | Tailscale Serve | `trusted-header` — Serve injects a login header | Exact `Tailscale-User-Login` injected by Serve after it overwrites a caller-supplied value. Not “anyone on the tailnet”. | Can create one missing private Serve route for you (`routeManagement: ensure`), or only check that the route already exists (`verify-only`). |
 | Cloudflare Tunnel **with Access** | `signed-jwt` — locally validates an Access identity token | A locally validated Access identity JWT (`Cf-Access-Jwt-Assertion`, RS256, issuer, audience, `email`, non-empty `sub`). Not a convenience email header, not a service token, not “the hostname is private”. | You configure the Access application yourself and point it only at the gateway. Setup verifies local JWT settings (`routeManagement: verify-only`); it cannot independently prove Access stays attached to the tunnel. |
+| Headscale via Tailscale TCP Serve | `gateway-credential` — possession of a gateway secret | Possession of a distinct high-entropy gateway credential issued per operator. TCP Serve supplies private reachability only; it has no HTTP identity header and does not prove who you are. | Can create one missing private TCP Serve forward to `127.0.0.1:3088` (`ensure`), or only check that it exists (`verify-only`). You supply the TLS certificate and key. Setup on Tailscale.com steers you to identity-aware Tailscale Serve instead. |
 | EasyTier | `gateway-credential` — possession of a gateway secret | Possession of a distinct high-entropy gateway credential. EasyTier is transport only. | **Not shipped.** |
 
 Private reachability is not authorization. A tailnet member, a Cloudflare
@@ -113,12 +114,13 @@ DSH).
 
 2. **Run guided setup and confirm the displayed plan.**
 
-   In a terminal, omit `--provider` to choose Tailscale Serve or Cloudflare
-   Access from a two-item menu. Detection of a local executable is a hint and,
-   when exactly one provider is found, a default — not a configuration check.
-   Pass `--provider` to skip the menu. Non-interactive setup still auto-selects
-   when exactly one provider executable is detected, and otherwise requires
-   `--provider`.
+   In a terminal, omit `--provider` to choose from a menu. Operators on
+   Tailscale.com are steered to identity-aware Tailscale Serve; Headscale TCP
+   Serve is listed when the live node is on Headscale. Detection of a local
+   executable is a hint and, when exactly one provider is found, a default —
+   not a configuration check. Pass `--provider` to skip the menu.
+   Non-interactive setup still auto-selects when exactly one provider
+   executable is detected, and otherwise requires `--provider`.
 
    Tailscale Serve:
 
@@ -142,6 +144,24 @@ DSH).
    order: existing Access origin, team origin, application audience, trusted
    email. Unattended `--yes` still requires all four flags. Setup never creates
    a tunnel, DNS record, or Access application.
+
+   Headscale TCP Serve (private reachability plus a generated gateway
+   credential; you supply the certificate). Setup on Tailscale.com will not
+   offer this as an equal menu choice:
+
+   ```sh
+   dsh plugin --profile web exec dsh-gateway -- setup --provider headscale-tcp-serve \
+     --tls-cert /path/to/dsh-one-gateway/cert.pem \
+     --tls-key /path/to/dsh-one-gateway/key.pem \
+     --credential-store /path/to/dsh-one-gateway/credentials.json \
+     --trusted-principal operator-1
+   ```
+
+   TCP Serve does not terminate HTTPS and does not prove identity. The gateway
+   terminates TLS on `127.0.0.1:3088` with that operator-supplied certificate.
+   Clients must trust the certificate; this pass does not generate a private
+   CA. After confirmation, setup issues one credential, prints the raw secret
+   once, and never writes it to the profile. `--print` issues nothing.
 
    Confirmation writes an enabled profile entry. Setup never guesses, kills, or
    restarts your supervisor. Restart the DSH Web process you already own.
@@ -169,17 +189,16 @@ fixed provider; you cannot mix them.
   configured issuer and application audience, required `exp`/`iat`/`nbf`,
   identity `type`, scalar `email`, and non-empty `sub`. The allowlist uses
   `email:<exact-email>`. The `CF_Authorization` cookie is never trusted.
-- **`gateway-credential` (implemented; no shipped provider uses it yet).**
+- **`gateway-credential` (Headscale TCP Serve).**
   Possession of a distinct ≥256-bit credential issued per operator (CLI-
   generated, not a user-chosen password), submitted in a POST body from the
   JSON API or a same-origin login form — never a URL query parameter — and
   exchanged for a short-lived `__Host-` session cookie (`HttpOnly`, `Secure`,
   `SameSite=Strict`). The gateway stores only a verifier hash; sessions are
   individually revocable and attempts are rate-limited without permanent
-  lockout. This mode is fully implemented and its browser login works, but no
-  currently-shipped provider (Tailscale Serve, Cloudflare Access) selects it
-  — it's ready for a future transport-only provider with no native identity
-  of its own.
+  lockout. TCP Serve does not contribute identity: being able to reach the
+  node is not authorization. Tailscale Serve and Cloudflare Access cannot
+  select this mode.
 
 ## After setup
 
@@ -211,6 +230,10 @@ compromise is out of scope.
 - Profile YAML never contains private keys, JWTs, or issued credential secrets.
 - Cloudflare signing keys are fetched from the team origin JWKS path with
   bounded HTTPS; they are not written to the profile.
+- Headscale TCP Serve requires an operator-supplied certificate and private
+  key (absolute paths, restrictive key permissions, matching pair, unexpired,
+  SAN covering `externalOrigin`). The gateway does not generate a CA or
+  self-signed certificate. Clients must enroll trust for that certificate.
 - Gateway credentials (when used) store only a verifier at an operator-supplied
   absolute path with restrictive permissions. The raw secret is shown once.
 - Backup the credential store as you would any other secret file; revocation is
@@ -224,7 +247,7 @@ get it working”.
 
 | Symptom | What to check |
 | --- | --- |
-| Gateway never becomes ready | `dsh-gateway doctor`; Tailscale Serve conflict/Funnel; Cloudflare JWKS fetch; missing allowlist |
+| Gateway never becomes ready | `dsh-gateway doctor`; Tailscale Serve conflict/Funnel; TCP Serve conflict/Funnel; TLS cert/key; Cloudflare JWKS fetch; missing allowlist |
 | 403 for an expected user | Exact, case-sensitive principal (`login:` / `email:`); duplicate identity headers; missing Origin on POST/API/WebSocket |
 | Setup refuses to write | Existing `dsh-gateway` or legacy `dsh-tailscale-gateway` entry; non-list YAML; missing `--yes` values |
 | Cloudflare still 403 with Access | Identity token missing/expired; wrong audience; service token (no `email`); Access not attached (probe may report `unprotected`) |
@@ -236,9 +259,10 @@ These may map onto the same contracts later. “It is a VPN” is not enough.
 - **EasyTier** — no application-level identity of who's actually calling (the
   correct mapping is `gateway-credential`), but overlay-only bind, forwarding,
   and post-verification were not evidenced.
-- **Headscale** — no native Serve equivalent; a reverse proxy you run yourself
-  would not inherit Serve's guarantee that it overwrites a caller-supplied
-  identity header.
+- **Headscale HTTPS Serve** — still blocked. Headscale does not provide
+  Tailscale's identity-aware HTTPS Serve. The shipped Headscale path is raw
+  TCP Serve plus `gateway-credential` and an operator-supplied certificate,
+  not a fabricated identity header.
 - **ZeroTier / WireGuard-only** — no application-level identity; would need
   `gateway-credential`, mTLS, or an identity proxy plus private-bind/TLS
   evidence.
@@ -272,6 +296,25 @@ auth:
   mode: trusted-header
   trustedPrincipals:
     - 'login:operator@example.invalid'
+```
+
+Headscale TCP Serve — `gateway-credential` means possession of a generated
+secret; TCP Serve is private reachability only. `tls` is required:
+
+```yaml
+enabled: true
+externalOrigin: 'https://gateway.example.invalid:8443'
+provider:
+  type: headscale-tcp-serve
+  routeManagement: ensure
+tls:
+  certPath: '/path/to/dsh-one-gateway/cert.pem'
+  keyPath: '/path/to/dsh-one-gateway/key.pem'
+auth:
+  mode: gateway-credential
+  trustedPrincipals:
+    - 'credential:operator-1'
+  credentialStorePath: '/path/to/dsh-one-gateway/credentials.json'
 ```
 
 Cloudflare — `signed-jwt` means the gateway locally validates the Access

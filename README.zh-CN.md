@@ -11,23 +11,24 @@
 <p align="center"><strong>把 DSH Web 分享给指定的人——而不是整个网络。</strong></p>
 
 这是一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-(DSH) 插件：在 DSH Web 前面放一层私有的零信任网关。调用方通过 Tailscale Serve
-或 Cloudflare Access 完成认证；一份私有允许名单决定谁能进来，不用你自己管密码。
+(DSH) 插件：在 DSH Web 前面放一层私有的零信任网关。调用方通过 Tailscale Serve、
+Cloudflare Access，或（在 Headscale 上）私有 TCP Serve 前面的系统生成网关凭证
+完成认证；一份私有允许名单决定谁能进来。没有用户自选密码要你管。
 
 它**不是**内网穿透工具，也不替代 Tailscale / Cloudflare。它为你已有的
 Tailscale / Cloudflare 内网穿透方案加上身份校验——自托管的访问控制，面向零信任
 家庭实验室：能连上不等于被允许。
 
-回环网关和 DSH 都只监听回环地址。受支持的入口（Tailscale Serve，或带
-Cloudflare Access 的 Cloudflare Tunnel）只负责把请求送到本机。加入该私有网络
-**从来不是**授权决定。任何请求在转发到 DSH 之前，都必须解析出一个明确的、在
-允许名单中的主体。
+回环网关和 DSH 都只监听回环地址。受支持的入口（Tailscale Serve，带
+Cloudflare Access 的 Cloudflare Tunnel，或 Headscale 上的 Tailscale TCP Serve）
+只负责把请求送到本机。加入该私有网络 **从来不是**授权决定。任何请求在转发到
+DSH 之前，都必须解析出一个明确的、在允许名单中的主体。
 
 ```text
-允许名单中的浏览器 ─ HTTPS ─> 入口（Tailscale Serve 或 Cloudflare Access）
-                                      │
-                                      └─ 身份感知的回环网关 ─> 本地 DSH
-                                         127.0.0.1:3088     127.0.0.1:3080
+允许名单中的浏览器 ─ HTTPS ─> 入口（Tailscale Serve、Cloudflare Access，
+                                      │           或 Headscale TCP Serve）
+                                      └─ 回环网关 ─> 本地 DSH
+                                         127.0.0.1:3088  127.0.0.1:3080
 ```
 
 **你得到的是：** DSH 前面的精确主体允许名单、仅回环的 HTTP/WebSocket 代理，以及
@@ -52,12 +53,11 @@ Cloudflare Access 的 Cloudflare Tunnel）只负责把请求送到本机。加�
    专用登录：系统生成的每主体凭证（不是用户自选密码）、只存校验值、有界的
    `HttpOnly`/`Secure`/`SameSite=Strict` 会话、可单独吊销、限速但不永久锁定。
    相对于典型的用户自选或共享密码，它在可猜测性、存储泄露和吊销范围上更强；
-   这不是“无密码”或“没有登录”，也不是宣称优于每一种密码或通行密钥。该模式已
-   完整实现，浏览器登录可用，但目前已交付的入口（Tailscale Serve、Cloudflare
-   Access）都不会选择它——留给未来没有原生身份的纯传输入口。
+    这不是“无密码”或“没有登录”，也不是宣称优于每一种密码或通行密钥。Headscale
+    TCP Serve 是已交付、使用该模式的传输入口。
 3. **一个插件、一条引导命令、一份允许名单。** 不必为每个入口单独搭一套。
-   Tailscale Serve 和带 Access 的 Cloudflare Tunnel 共用同一个回环网关。新的
-   入口是再加一个适配器，不是再做一个产品。
+    Tailscale Serve、带 Access 的 Cloudflare Tunnel，以及 Headscale TCP Serve
+    共用同一个回环网关。新的入口是再加一个适配器，不是再做一个产品。
 
 ## 明确不做
 
@@ -78,6 +78,7 @@ Cloudflare Access 的 Cloudflare Tunnel）只负责把请求送到本机。加�
 | --- | --- | --- | --- |
 | Tailscale Serve | `trusted-header` — Serve 注入登录头 | Serve 注入的精确 `Tailscale-User-Login`（会覆盖调用方自带值）。不是“tailnet 上的任何人”。 | 可以为你创建一条缺失的私有 Serve 路由（`routeManagement: ensure`），或只检查路由已经存在（`verify-only`）。 |
 | 带 Access 的 Cloudflare Tunnel | `signed-jwt` — 本地校验 Access 身份令牌 | 本地校验的 Access 身份 JWT（`Cf-Access-Jwt-Assertion`、RS256、issuer、audience、`email`、非空 `sub`）。不是方便邮箱头，不是 service token，也不是“主机名是私有的”。 | 你自己配置 Access 应用，并只转发到网关。setup 校验本地 JWT 设置（`routeManagement: verify-only`）；它无法独立证明 Access 仍附着在隧道上。 |
+| Headscale（经 Tailscale TCP Serve） | `gateway-credential` — 持有网关密钥 | 持有为该操作员签发的高熵网关凭证。TCP Serve 只提供私有可达性，没有 HTTP 身份头，也不能证明你是谁。 | 可以为你创建一条指向 `127.0.0.1:3088` 的缺失私有 TCP Serve 转发（`ensure`），或只检查它已经存在（`verify-only`）。证书和私钥由你提供。在 Tailscale.com 上，setup 会引导你走有身份的 Tailscale Serve，而不是这条更弱的路径。 |
 | EasyTier | `gateway-credential` — 持有网关密钥 | 持有为该操作员签发的高熵网关凭证。EasyTier 只提供传输。 | **尚未提供。** |
 
 私有可达性不是授权。tailnet 成员、可从互联网路由到的 Cloudflare 主机名、或
@@ -101,11 +102,11 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
 
 2. **运行引导 setup，并确认显示的计划。**
 
-   在终端里省略 `--provider` 会打开一个两项菜单，选择 Tailscale Serve 或
-   Cloudflare Access。检测到本地可执行文件只是提示；当恰好检测到一个入口时，
-   它会成为默认值——不是配置校验。传入 `--provider` 可跳过菜单。非交互
-   setup 在恰好检测到一个入口可执行文件时仍会自动选择，否则必须提供
-   `--provider`。
+   在终端里省略 `--provider` 会打开菜单。Tailscale.com 上的操作员会被引导到
+   有身份的 Tailscale Serve；当现场节点在 Headscale 上时，才会列出 Headscale
+   TCP Serve。检测到本地可执行文件只是提示；当恰好检测到一个入口时，它会成为
+   默认值——不是配置校验。传入 `--provider` 可跳过菜单。非交互 setup 在恰好
+   检测到一个入口可执行文件时仍会自动选择，否则必须提供 `--provider`。
 
    Tailscale Serve：
 
@@ -127,6 +128,21 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
    在 TTY 中，未提供的 Cloudflare 值会按此顺序交互收集：已有 Access origin、
    团队 origin、应用 audience、受信任邮箱。无人值守的 `--yes` 仍必须提供全部
    四个标志。setup 不会创建隧道、DNS 记录或 Access 应用。
+
+   Headscale TCP Serve（私有可达性加上系统生成的网关凭证；证书由你提供）。
+   在 Tailscale.com 上，setup 不会把它当作同等权重的菜单项：
+
+   ```sh
+   dsh plugin --profile web exec dsh-gateway -- setup --provider headscale-tcp-serve \
+     --tls-cert /path/to/dsh-one-gateway/cert.pem \
+     --tls-key /path/to/dsh-one-gateway/key.pem \
+     --credential-store /path/to/dsh-one-gateway/credentials.json \
+     --trusted-principal operator-1
+   ```
+
+   TCP Serve 不终止 HTTPS，也不证明身份。网关在 `127.0.0.1:3088` 上用你提供的
+   证书终止 TLS。客户端必须信任该证书；本轮不生成私有 CA。确认后，setup 签发
+   一份凭证，明文只显示一次，绝不写入 profile。`--print` 不会签发任何凭证。
 
    确认后才会写入启用的 profile 条目。setup 不会猜测、杀死或重启你的
    supervisor。请自行重启你已经在用的 DSH Web 进程。
@@ -150,13 +166,12 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
   audience，具备必需的 `exp`/`iat`/`nbf`、身份 `type`、标量 `email` 和非空
   `sub`。允许名单使用 `email:<exact-email>`。永远不信任 `CF_Authorization`
   cookie。
-- **`gateway-credential`（已实现；尚无已交付的入口使用它）。** 持有为每个操作
-  员签发的 ≥256 bit 凭证（由 CLI 生成，不是用户自选密码），经 JSON API 或同源
-  登录表单的 POST 正文提交——从不放进 URL 查询参数——换成短时 `__Host-` 会话
-  cookie（`HttpOnly`、`Secure`、`SameSite=Strict`）。网关只存校验哈希；会话可
-  单独吊销，尝试会被限速但不永久锁定。该模式已完整实现，浏览器登录可用，但
-  目前已交付的入口（Tailscale Serve、Cloudflare Access）都不会选择它——留给
-  未来没有原生身份的纯传输入口。
+- **`gateway-credential`（Headscale TCP Serve）。** 持有为每个操作员签发的
+  ≥256 bit 凭证（由 CLI 生成，不是用户自选密码），经 JSON API 或同源登录表单
+  的 POST 正文提交——从不放进 URL 查询参数——换成短时 `__Host-` 会话 cookie
+  （`HttpOnly`、`Secure`、`SameSite=Strict`）。网关只存校验哈希；会话可单独
+  吊销，尝试会被限速但不永久锁定。TCP Serve 不贡献身份：能连上节点不是授权。
+  Tailscale Serve 和 Cloudflare Access 不能选择该模式。
 
 ## 安装之后
 
@@ -184,6 +199,9 @@ profile、或拥有本地 root 的进程。回环 TCP 无法证明是哪个本�
 - Profile YAML 从不包含私钥、JWT 或已签发的凭证明文。
 - Cloudflare 签名密钥从团队 origin 的 JWKS 路径按有界 HTTPS 拉取，不写入
   profile。
+- Headscale TCP Serve 要求操作员提供的证书和私钥（绝对路径、严格的私钥权限、
+  密钥与证书匹配、未过期、SAN 覆盖 `externalOrigin`）。网关不生成 CA 或自签
+  证书。客户端必须把该证书加入信任。
 - 网关凭证（若使用）只在操作员提供的绝对路径存储校验器，并要求严格权限。明文
   只显示一次。
 - 像对待其他密钥文件一样备份凭证库；撤销按主体进行。会话在内存中，网关进程
@@ -195,7 +213,7 @@ profile、或拥有本地 root 的进程。回环 TCP 无法证明是哪个本�
 
 | 现象 | 检查 |
 | --- | --- |
-| 网关一直未就绪 | `dsh-gateway doctor`；Tailscale Serve 冲突/Funnel；Cloudflare JWKS；缺少允许名单 |
+| 网关一直未就绪 | `dsh-gateway doctor`；Tailscale Serve 冲突/Funnel；TCP Serve 冲突/Funnel；TLS 证书/私钥；Cloudflare JWKS；缺少允许名单 |
 | 预期用户 403 | 精确、区分大小写的主体（`login:` / `email:`）；重复身份头；POST/API/WebSocket 缺少 Origin |
 | setup 拒绝写入 | 已有 `dsh-gateway` 或旧版 `dsh-tailscale-gateway` 条目；非列表 YAML；`--yes` 缺值 |
 | 配了 Access 仍 403 | 身份 token 缺失/过期；audience 错误；service token（无 `email`）；Access 未附着（探测可能报告 `unprotected`） |
@@ -206,8 +224,9 @@ profile、或拥有本地 root 的进程。回环 TCP 无法证明是哪个本�
 
 - **EasyTier** — 没有应用层身份、无法证明实际是谁在调用（正确映射是
   `gateway-credential`），但 overlay 绑定、转发与事后校验尚未取证。
-- **Headscale** — 没有原生 Serve 等价物；你自己跑的反向代理不会继承 Serve
-  “覆盖调用方自带身份头”的保证。
+- **Headscale HTTPS Serve** — 仍然不支持。Headscale 没有 Tailscale 那种带身份
+  的 HTTPS Serve。已交付的 Headscale 路径是原始 TCP Serve，加上
+  `gateway-credential` 和操作员提供的证书，而不是伪造的身份头。
 - **ZeroTier / 仅 WireGuard** — 没有应用层身份；需要 `gateway-credential`、
   mTLS 或身份代理，外加私有绑定/TLS 证据。
 - **NetBird** — 声称的身份头在没有引用过的覆盖配置文件和集成测试前不受支持。
@@ -237,6 +256,25 @@ auth:
   mode: trusted-header
   trustedPrincipals:
     - 'login:operator@example.invalid'
+```
+
+Headscale TCP Serve — `gateway-credential` 表示持有系统生成的密钥；TCP Serve
+只提供私有可达性。必须提供 `tls`：
+
+```yaml
+enabled: true
+externalOrigin: 'https://gateway.example.invalid:8443'
+provider:
+  type: headscale-tcp-serve
+  routeManagement: ensure
+tls:
+  certPath: '/path/to/dsh-one-gateway/cert.pem'
+  keyPath: '/path/to/dsh-one-gateway/key.pem'
+auth:
+  mode: gateway-credential
+  trustedPrincipals:
+    - 'credential:operator-1'
+  credentialStorePath: '/path/to/dsh-one-gateway/credentials.json'
 ```
 
 Cloudflare — `signed-jwt` 表示网关在本地校验 Access 身份 JWT；

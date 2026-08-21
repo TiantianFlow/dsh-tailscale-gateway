@@ -40,6 +40,16 @@ to `127.0.0.1:3080` or read DSH configuration are out of scope.
 
 Private network membership is never an authorization decision.
 
+## Operator-supplied TLS (Headscale TCP Serve)
+
+TCP Serve is raw L4 pass-through. The gateway terminates TLS on loopback
+`127.0.0.1:3088` with an operator-supplied certificate and private key.
+Startup fails closed if the key permissions are too broad, the key does not
+match the certificate, the certificate is expired or not yet valid, or the
+SAN does not cover `externalOrigin`. This pass does not generate a CA or
+self-signed certificate. Client trust enrollment is the operator's
+responsibility. TCP Serve itself proves reachability, not identity.
+
 ## Cloudflare signing keys
 
 v1 loads JWKS from the configured team origin with bounded HTTPS (timeout,
