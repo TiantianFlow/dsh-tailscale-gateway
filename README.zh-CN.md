@@ -39,13 +39,21 @@ DSH 之前，都必须解析出一个明确的、在允许名单中的主体。
 
 ## 和同类插件的差别
 
-其他 DSH 网关常常监听局域网、在 DSH 前面放登录页，或包一层公开隧道。本插件是
-另一套约定：
+其他 DSH 网关可能在回环之外监听、给 DSH 内部打补丁以便升级后门控覆盖仍穷尽，
+或在 DSH 前面做反向代理。那些设计也可以覆盖 `/api` 和 WebSocket；差别不在谁
+覆盖得更全。本插件是另一套约定：DSH 本身从不离开回环。
 
 1. **私有网络成员身份从来不是授权。** 监听 `0.0.0.0`、把 RFC1918 当成放行，都
    不在范围内。监听只在回环。同一 Wi-Fi、同一 tailnet 或同一 mesh，都不会让你
    进来。
-2. **对 Tailscale Serve 和 Cloudflare Access，身份来自入口本身——不是登录页、
+2. **失效关闭的 DSH 源。** DSH 只待在回环；它前面唯一的监听者是本网关。DSH
+   升级不会悄悄增加一条可从网外到达的路由——没有一张必须保持穷尽的门控路由表，
+   因为 DSH 一开始就不可从网外到达。全覆盖门控漏掉一条路由是静默绕过；本桥接
+   漏掉一条只是那条代理路径坏了，不会把 DSH 暴露出去。
+3. **不给 DSH 核心或客户端库打补丁。** 有些门控靠给 DSH 的 HTTP 与 upgrade
+   入口打补丁来保持覆盖穷尽，并在每次升级后重新打上——因为上游变更会悄悄把
+   补丁冲掉。本网关是外部进程，从不改 DSH 自己的代码。
+4. **对 Tailscale Serve 和 Cloudflare Access，身份来自入口本身——不是登录页、
    密码或共享令牌。** 密码表单、共享令牌、会话 cookie 门是很大的认证面，也是
    常见出 bug 的地方。这两种已交付模式使用 Serve 注入的
    `Tailscale-User-Login`，或本地校验的 Cloudflare Access JWT。我们核对允许名单，
@@ -53,11 +61,13 @@ DSH 之前，都必须解析出一个明确的、在允许名单中的主体。
    专用登录：系统生成的每主体凭证（不是用户自选密码）、只存校验值、有界的
    `HttpOnly`/`Secure`/`SameSite=Strict` 会话、可单独吊销、限速但不永久锁定。
    相对于典型的用户自选或共享密码，它在可猜测性、存储泄露和吊销范围上更强；
-    这不是“无密码”或“没有登录”，也不是宣称优于每一种密码或通行密钥。Headscale
-    TCP Serve 是已交付、使用该模式的传输入口。
-3. **一个插件、一条引导命令、一份允许名单。** 不必为每个入口单独搭一套。
-    Tailscale Serve、带 Access 的 Cloudflare Tunnel，以及 Headscale TCP Serve
-    共用同一个回环网关。新的入口是再加一个适配器，不是再做一个产品。
+   这不是“无密码”或“没有登录”，也不是宣称优于每一种密码或通行密钥。Headscale
+   TCP Serve 是已交付、使用该模式的传输入口。对任何没有原生身份的纯传输入口，
+   约定都是：由产品自己把私有 overlay 桥接到不变的回环网关，用
+   `gateway-credential` 认证——绝不伪造身份头。
+5. **一个插件、一条引导命令、一份允许名单。** 不必为每个入口单独搭一套。
+   Tailscale Serve、带 Access 的 Cloudflare Tunnel，以及 Headscale TCP Serve
+   共用同一个回环网关。新的入口是再加一个适配器，不是再做一个产品。
 
 ## 明确不做
 
@@ -222,13 +232,15 @@ profile、或拥有本地 root 的进程。回环 TCP 无法证明是哪个本�
 
 它们以后可能映射到同一套约定。“它是 VPN”不够。
 
-- **EasyTier** — 没有应用层身份、无法证明实际是谁在调用（正确映射是
-  `gateway-credential`），但 overlay 绑定、转发与事后校验尚未取证。
+- **EasyTier / ZeroTier / 仅 WireGuard** — 没有应用层身份（正确映射是
+  `gateway-credential`）。三者今天都不做，原因相同：本代码库还无法证明监听只
+  绑在私有 overlay 网卡上，而不仅仅是上报了正确的本机地址。Linux / macOS 有
+  `SO_BINDTODEVICE` / `IP_BOUND_IF`；Node 的 `net.Server.listen()` 两者都不
+  暴露。这是一个具体的工程缺口，不是断言这些传输永远不能用。树上还没有它们的
+  适配器，也没有承诺的时间表。
 - **Headscale HTTPS Serve** — 仍然不支持。Headscale 没有 Tailscale 那种带身份
   的 HTTPS Serve。已交付的 Headscale 路径是原始 TCP Serve，加上
   `gateway-credential` 和操作员提供的证书，而不是伪造的身份头。
-- **ZeroTier / 仅 WireGuard** — 没有应用层身份；需要 `gateway-credential`、
-  mTLS 或身份代理，外加私有绑定/TLS 证据。
 - **NetBird** — 声称的身份头在没有引用过的覆盖配置文件和集成测试前不受支持。
 - **Twingate / Pangolin** — 没有冻结的 JWT/头校验配置文件。
 - **通用反向代理 / 任意 trusted-header** — 太容易配成可伪造的头。

@@ -39,31 +39,47 @@ The full command is `dsh-one-gateway`; a shorter `dsh-gateway` alias is installe
 
 ## How this is different
 
-Other DSH gateways often bind the LAN, put a login page in front of DSH, or wrap
-a public tunnel. This plugin is a different contract:
+Other DSH gateways may bind off loopback, patch DSH internals so a gate stays
+exhaustive after upgrades, or run a reverse proxy in front of DSH. Those
+designs can cover `/api` and WebSockets too; the difference is not who covers
+more of the surface. This plugin is a different contract: DSH itself never
+leaves loopback.
 
 1. **Private network membership is never authorization.** Binding `0.0.0.0` or
    treating RFC1918 as an allow is out of scope. The listener stays on loopback.
    Being on the same Wi-Fi, tailnet, or mesh does not get you in.
-2. **For Tailscale Serve and Cloudflare Access, identity comes from the
+2. **Fail-closed DSH origin.** DSH stays on loopback; the gateway is the only
+   listener in front of it. A DSH upgrade cannot silently add a route that
+   becomes reachable off-host — there is no gate route table to keep
+   exhaustive, because DSH was never reachable off-host to begin with. A missed
+   route in a full-coverage gate is a silent bypass; a missed route in this
+   bridge just breaks that one proxied path. It does not expose DSH.
+3. **No DSH-core or client-library patches.** Some gates stay exhaustive by
+   patching DSH HTTP and upgrade entry points, then re-applying those patches
+   after every upgrade — because an upstream change can silently undo them.
+   This gateway is an external process. DSH's own code is never modified.
+4. **For Tailscale Serve and Cloudflare Access, identity comes from the
    provider — not a login page, password, or shared token.**
    Password forms, shared tokens, and session-cookie doors are a large auth
    surface and a common source of bugs. Those two shipped modes use Serve's
    injected `Tailscale-User-Login`, or a locally verified Cloudflare Access
    JWT. We check an allowlist. We do not ask you to invent a password.
-    `gateway-credential` is a smaller, purpose-built login for transports with
-    no native identity: a generated per-principal credential (not a user-chosen
-    password), verifier-only storage, a bounded
-    `HttpOnly`/`Secure`/`SameSite=Strict` session, individual revocation, and
-    rate limiting without permanent lockout. Compared with a typical
-    user-chosen or shared password, that is stronger on guessability, storage
-    disclosure, and revocation; it is not "passwordless" and not a claim of
-    superiority over every password or passkey. Headscale TCP Serve is the
-    shipped transport that uses this mode.
-3. **One plugin, one onboarding command, one allowlist.** Instead of a different
-    bespoke setup per provider, Tailscale Serve, Cloudflare Tunnel with Access,
-    and Headscale TCP Serve share one loopback gateway. A new provider is
-    another adapter, not another product.
+   `gateway-credential` is a smaller, purpose-built login for transports with
+   no native identity: a generated per-principal credential (not a user-chosen
+   password), verifier-only storage, a bounded
+   `HttpOnly`/`Secure`/`SameSite=Strict` session, individual revocation, and
+   rate limiting without permanent lockout. Compared with a typical
+   user-chosen or shared password, that is stronger on guessability, storage
+   disclosure, and revocation; it is not "passwordless" and not a claim of
+   superiority over every password or passkey. Headscale TCP Serve is the
+   shipped transport that uses this mode. For any transport-only provider with
+   no native identity, the contract is a product-owned bridge from the private
+   overlay to the unchanged loopback gateway, authenticated with
+   `gateway-credential` — never a fabricated identity header.
+5. **One plugin, one onboarding command, one allowlist.** Instead of a different
+   bespoke setup per provider, Tailscale Serve, Cloudflare Tunnel with Access,
+   and Headscale TCP Serve share one loopback gateway. A new provider is
+   another adapter, not another product.
 
 ## What this plugin does not do
 
@@ -256,16 +272,18 @@ get it working”.
 
 These may map onto the same contracts later. “It is a VPN” is not enough.
 
-- **EasyTier** — no application-level identity of who's actually calling (the
-  correct mapping is `gateway-credential`), but overlay-only bind, forwarding,
-  and post-verification were not evidenced.
+- **EasyTier / ZeroTier / WireGuard-only** — no application-level identity
+  (the mapping is `gateway-credential`). All three stay out today for one
+  shared reason: this codebase cannot yet prove a listener is bound exclusively
+  to the private overlay interface, not merely that it reports the right local
+  address. Linux and macOS have `SO_BINDTODEVICE` / `IP_BOUND_IF` for that;
+  Node's `net.Server.listen()` exposes neither. That is a specific engineering
+  gap, not a claim that these transports cannot work. There is no shipped
+  adapter for them, and no committed schedule.
 - **Headscale HTTPS Serve** — still blocked. Headscale does not provide
   Tailscale's identity-aware HTTPS Serve. The shipped Headscale path is raw
   TCP Serve plus `gateway-credential` and an operator-supplied certificate,
   not a fabricated identity header.
-- **ZeroTier / WireGuard-only** — no application-level identity; would need
-  `gateway-credential`, mTLS, or an identity proxy plus private-bind/TLS
-  evidence.
 - **NetBird** — claimed identity headers are unsupported until a cited overwrite
   profile and integration test exist.
 - **Twingate / Pangolin** — no frozen JWT/header validation profile.
