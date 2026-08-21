@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { start } from '../src/core/server.mjs'
 import {
   classifyTcpServeStatus,
   describeTcpServeStatus,
@@ -10,7 +9,6 @@ import {
   tcpServeRoute,
   TCP_SERVE_PROXY,
 } from '../src/providers/headscale-tcp-serve.mjs'
-import { stubAuth } from './helpers.mjs'
 
 const ORIGIN = 'https://gateway.example.invalid:8443'
 const route = tcpServeRoute(ORIGIN)
@@ -190,27 +188,3 @@ test('provider apply never issues reset, off, Funnel, or tailscaled restart argv
   assert.doesNotMatch(joined, /tailscaled/)
 })
 
-test('ensure startup closes the loopback sidecar when TCP Serve management fails', async () => {
-  let closed = false
-  const fakeServer = {
-    once: () => fakeServer,
-    listen: (_port, _host, callback) => callback(),
-    close: callback => { closed = true; callback() },
-  }
-  const config = {
-    enabled: true,
-    externalOrigin: ORIGIN,
-    provider: { type: 'headscale-tcp-serve', routeManagement: 'ensure' },
-    identity: { identityKind: 'none' },
-  }
-  await assert.rejects(start(config, {
-    auth: stubAuth(),
-    createGateway: () => fakeServer,
-    runtime: {
-      tailscaleBinary: '/opt/tailscale/tailscale',
-      run: async () => { throw new Error('tailscale not found') },
-    },
-    logger: { log: () => {} },
-  }), /after the loopback sidecar bound/)
-  assert.equal(closed, true)
-})

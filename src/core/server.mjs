@@ -1,4 +1,5 @@
-import { createServer } from 'node:http'
+import { createServer as createHttpServer } from 'node:http'
+import { createServer as createHttpsServer } from 'node:https'
 import {
   GATEWAY_HOST,
   GATEWAY_PORT,
@@ -10,6 +11,7 @@ import { proxyHttp } from './proxy-http.mjs'
 import { proxyWebSocket, writeUpgradeDenied } from './proxy-websocket.mjs'
 import { isLocalReadinessRequest, isReadinessPath, writeReadiness } from './readiness.mjs'
 import { requestContext } from './request-context.mjs'
+import { loadGatewayTls, needsLoopbackTls } from './tls.mjs'
 import { createAuth } from '../auth/create.mjs'
 import { applyProvider, inspectProvider, verifyProvider } from '../providers/registry.mjs'
 
@@ -38,10 +40,10 @@ function createInFlightGuard() {
   }
 }
 
-export function createGatewayServer(config, { isReady = () => false, auth } = {}) {
+export function createGatewayServer(config, { isReady = () => false, auth, tls } = {}) {
   if (!auth) throw new Error('dsh-one-gateway: createGatewayServer requires an auth module')
   const inFlight = createInFlightGuard()
-  const server = createServer((request, response) => {
+  const requestListener = (request, response) => {
     if (isReadinessPath(request)) {
       if (!isLocalReadinessRequest(request, config)) return writeDenied(response, 404, 'Not Found')
       return writeReadiness(response, isReady(), config.activationToken)
@@ -64,7 +66,10 @@ export function createGatewayServer(config, { isReady = () => false, auth } = {}
     }).catch(() => {
       if (!response.headersSent) writeDenied(response, 403, 'Forbidden')
     })
-  })
+  }
+  const server = tls
+    ? createHttpsServer({ key: tls.key, cert: tls.cert }, requestListener)
+    : createHttpServer(requestListener)
   server.on('upgrade', (request, socket, head) => {
     if (!inFlight.acquire()) {
       writeUpgradeDenied(socket, 429, 'Too Many Requests')
@@ -103,13 +108,24 @@ export async function start(config, {
     throw new Error(`auth is not ready: ${authReady.reasonCode ?? 'unknown'}`)
   }
 
+  let tls
+  if (needsLoopbackTls(config)) {
+    try {
+      tls = await loadGatewayTls(config.tls, config.externalOrigin)
+    } catch (error) {
+      await resolvedAuth.close?.()
+      throw new Error(`tls is not ready: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   let ready = false
-  const server = createGateway(config, { isReady: () => ready, auth: resolvedAuth })
+  const server = createGateway(config, { isReady: () => ready, auth: resolvedAuth, tls })
   await new Promise((resolve, reject) => {
     server.once('error', reject)
     server.listen(GATEWAY_PORT, GATEWAY_HOST, resolve)
   })
-  logger.log(`[${PACKAGE_NAME}] bound only on http://${GATEWAY_HOST}:${GATEWAY_PORT}`)
+  const scheme = tls ? 'https' : 'http'
+  logger.log(`[${PACKAGE_NAME}] bound only on ${scheme}://${GATEWAY_HOST}:${GATEWAY_PORT}`)
 
   try {
     const observed = await inspectProvider(config, runtime)
