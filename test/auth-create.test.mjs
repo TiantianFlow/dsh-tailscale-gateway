@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createAuth } from '../src/auth/create.mjs'
+import { assertSafeConfig } from '../src/core/config.mjs'
+import { headscaleTcpConfig } from './helpers.mjs'
 
 function gatewayCredentialFactoryConfig(identityKind) {
   return {
@@ -15,6 +17,15 @@ function gatewayCredentialFactoryConfig(identityKind) {
     identity: { identityKind },
   }
 }
+
+test('createAuth accepts gateway-credential only when identityCapability is none', async () => {
+  const safe = assertSafeConfig(headscaleTcpConfig())
+  const auth = await createAuth(safe, {
+    loadStore: async () => ({ version: 1, credentials: [] }),
+  })
+  const ready = await auth.readiness()
+  assert.equal(ready.ready, true)
+})
 
 test('createAuth rejects gateway-credential for overwritten-header and signed-jwt identity kinds', async () => {
   await assert.rejects(

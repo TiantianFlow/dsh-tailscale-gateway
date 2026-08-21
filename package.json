@@ -24,7 +24,7 @@
   "scripts": {
     "start": "node src/sidecar.mjs",
     "test": "node --test --test-concurrency=1",
-    "check": "node --check src/plugin.mjs && node --check src/sidecar.mjs && node --check src/core/server.mjs && node --check src/core/config.mjs && node --check bin/dsh-one-gateway.mjs"
+    "check": "node --check src/plugin.mjs && node --check src/sidecar.mjs && node --check src/core/server.mjs && node --check src/core/config.mjs && node --check src/core/tls.mjs && node --check src/providers/headscale-tcp-serve.mjs && node --check bin/dsh-one-gateway.mjs"
   },
   "engines": {
     "node": ">=20.0.0"

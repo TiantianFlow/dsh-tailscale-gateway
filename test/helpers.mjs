@@ -6,6 +6,11 @@ export const TEAM_ORIGIN = 'https://team.example.invalid'
 export const APPLICATION_AUDIENCE = 'replace-with-access-application-audience'
 export const OPERATOR_LOGIN = 'login:operator@example.invalid'
 export const OPERATOR_EMAIL = 'email:operator@example.invalid'
+export const HEADSCALE_ORIGIN = 'https://gateway.example.invalid:8443'
+export const OPERATOR_CREDENTIAL = 'credential:operator-1'
+export const CREDENTIAL_STORE_PATH = '/path/to/dsh-one-gateway/credentials.json'
+export const TLS_CERT_PATH = '/path/to/dsh-one-gateway/cert.pem'
+export const TLS_KEY_PATH = '/path/to/dsh-one-gateway/key.pem'
 
 export function tailscaleConfig(overrides = {}) {
   return {
@@ -13,6 +18,21 @@ export function tailscaleConfig(overrides = {}) {
     externalOrigin: TAILSCALE_ORIGIN,
     provider: { type: 'tailscale-serve', routeManagement: 'ensure' },
     auth: { mode: 'trusted-header', trustedPrincipals: [OPERATOR_LOGIN] },
+    ...overrides,
+  }
+}
+
+export function headscaleTcpConfig(overrides = {}) {
+  return {
+    enabled: true,
+    externalOrigin: HEADSCALE_ORIGIN,
+    provider: { type: 'headscale-tcp-serve', routeManagement: 'ensure' },
+    auth: {
+      mode: 'gateway-credential',
+      trustedPrincipals: [OPERATOR_CREDENTIAL],
+      credentialStorePath: CREDENTIAL_STORE_PATH,
+    },
+    tls: { certPath: TLS_CERT_PATH, keyPath: TLS_KEY_PATH },
     ...overrides,
   }
 }

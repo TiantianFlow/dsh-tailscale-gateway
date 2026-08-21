@@ -9,6 +9,7 @@ import {
   MAX_TRUSTED_PRINCIPALS,
   PROVIDER_CLOUDFLARE,
   PROVIDER_EASYTIER,
+  PROVIDER_HEADSCALE_TCP_SERVE,
   PROVIDER_TAILSCALE,
   READINESS_PATH,
   ROUTE_ENSURE,
@@ -18,14 +19,16 @@ import {
 } from './constants.mjs'
 import { httpsPortFromOrigin } from './origin.mjs'
 
-const ENABLED_KEYS = new Set(['enabled', 'externalOrigin', 'provider', 'auth', 'activationToken'])
+const ENABLED_KEYS = new Set(['enabled', 'externalOrigin', 'provider', 'auth', 'activationToken', 'tls'])
 const FORBIDDEN_KEYS = new Set([
   'listenHost', 'listenPort', 'upstream', 'headerName', 'jwksUrl',
   'allowAnonymous', 'trustPrivateNetwork', 'public', 'funnel', 'publicOrigin',
-  'tls', 'trustedLogins', 'tailscaleServe',
+  'trustedLogins', 'tailscaleServe',
 ])
 const TAILSCALE_PROVIDER_KEYS = new Set(['type', 'routeManagement'])
+const HEADSCALE_TCP_PROVIDER_KEYS = new Set(['type', 'routeManagement'])
 const CLOUDFLARE_PROVIDER_KEYS = new Set(['type', 'routeManagement', 'teamOrigin', 'applicationAudience'])
+const TLS_KEYS = new Set(['certPath', 'keyPath'])
 const AUTH_COMMON_KEYS = new Set(['mode', 'trustedPrincipals'])
 const AUTH_CREDENTIAL_KEYS = new Set(['mode', 'trustedPrincipals', 'credentialStorePath'])
 
@@ -140,6 +143,17 @@ function parseTailscaleProvider(provider) {
   })
 }
 
+function parseHeadscaleTcpProvider(provider) {
+  rejectUnknownKeys(provider, HEADSCALE_TCP_PROVIDER_KEYS, 'provider')
+  if (typeof provider.routeManagement !== 'string') {
+    throw new Error('dsh-one-gateway: provider.routeManagement is required')
+  }
+  return Object.freeze({
+    type: PROVIDER_HEADSCALE_TCP_SERVE,
+    routeManagement: parseRouteManagement(provider.routeManagement, { allowed: [ROUTE_ENSURE, ROUTE_VERIFY_ONLY] }),
+  })
+}
+
 function parseCloudflareProvider(provider) {
   rejectUnknownKeys(provider, CLOUDFLARE_PROVIDER_KEYS, 'provider')
   if (typeof provider.routeManagement !== 'string') {
@@ -172,18 +186,39 @@ function parseProvider(provider) {
     throw new Error('dsh-one-gateway: provider type easytier is not supported in v1; the adapter is deferred until overlay-only bind and post-verification evidence exists')
   }
   if (provider.type === PROVIDER_TAILSCALE) return parseTailscaleProvider(provider)
+  if (provider.type === PROVIDER_HEADSCALE_TCP_SERVE) return parseHeadscaleTcpProvider(provider)
   if (provider.type === PROVIDER_CLOUDFLARE) return parseCloudflareProvider(provider)
-  throw new Error('dsh-one-gateway: provider.type must be tailscale-serve or cloudflare-access')
+  throw new Error('dsh-one-gateway: provider.type must be tailscale-serve, cloudflare-access, or headscale-tcp-serve')
+}
+
+function parseAbsolutePath(value, label) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`dsh-one-gateway: ${label} is required`)
+  }
+  if (!value.startsWith('/') || value.includes('\\') || value.includes('\0') || value.includes('..')) {
+    throw new Error(`dsh-one-gateway: ${label} must be an absolute path`)
+  }
+  return value
+}
+
+function parseTls(tls) {
+  if (!isRecord(tls)) throw new Error('dsh-one-gateway: tls is required for headscale-tcp-serve')
+  rejectUnknownKeys(tls, TLS_KEYS, 'tls')
+  return Object.freeze({
+    certPath: parseAbsolutePath(tls.certPath, 'tls.certPath'),
+    keyPath: parseAbsolutePath(tls.keyPath, 'tls.keyPath'),
+  })
 }
 
 function parseCredentialStorePath(value) {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error('dsh-one-gateway: credentialStorePath is required for gateway-credential')
+  try {
+    return parseAbsolutePath(value, 'credentialStorePath')
+  } catch (error) {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new Error('dsh-one-gateway: credentialStorePath is required for gateway-credential')
+    }
+    throw error
   }
-  if (!value.startsWith('/') || value.includes('\\') || value.includes('\0') || value.includes('..')) {
-    throw new Error('dsh-one-gateway: credentialStorePath must be an absolute path')
-  }
-  return value
 }
 
 function parseAuth(auth, expectedMode, expectedNamespace) {
@@ -231,6 +266,11 @@ export function assertSafeConfig(input) {
   const externalOrigin = normalizeExternalOrigin(config.externalOrigin, { requireTailscaleDns, rejectQuickTunnel })
   const auth = parseAuth(config.auth, compatibility.authMode, compatibility.principalNamespace)
   const activationToken = config.activationToken === undefined ? undefined : parseActivationToken(config.activationToken)
+  const tls = provider.type === PROVIDER_HEADSCALE_TCP_SERVE
+    ? parseTls(config.tls)
+    : config.tls === undefined
+      ? undefined
+      : (() => { throw new Error('dsh-one-gateway: tls is only valid for headscale-tcp-serve') })()
   return Object.freeze({
     enabled: true,
     externalOrigin,
@@ -241,6 +281,7 @@ export function assertSafeConfig(input) {
     listenPort: GATEWAY_PORT,
     upstream: Object.freeze({ host: UPSTREAM_HOST, port: UPSTREAM_PORT }),
     httpsPort: httpsPortFromOrigin(externalOrigin),
+    ...(tls === undefined ? {} : { tls }),
     ...(activationToken === undefined ? {} : { activationToken }),
   })
 }

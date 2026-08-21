@@ -2,7 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { assertSafeConfig } from '../src/core/config.mjs'
 import { GATEWAY_HOST, GATEWAY_PORT } from '../src/core/constants.mjs'
-import { cloudflareConfig, TAILSCALE_ORIGIN, tailscaleConfig } from './helpers.mjs'
+import {
+  cloudflareConfig,
+  CREDENTIAL_STORE_PATH,
+  HEADSCALE_ORIGIN,
+  headscaleTcpConfig,
+  TAILSCALE_ORIGIN,
+  tailscaleConfig,
+} from './helpers.mjs'
 
 test('enabled Tailscale configuration pins loopback endpoints and rejects overrides', () => {
   const safe = assertSafeConfig(tailscaleConfig())
@@ -18,7 +25,7 @@ test('enabled Tailscale configuration pins loopback endpoints and rejects overri
   assert.throws(() => assertSafeConfig(tailscaleConfig({ upstream: { host: 'localhost', port: 1 } })), /must not contain upstream/)
   assert.throws(() => assertSafeConfig(tailscaleConfig({ headerName: 'X-User' })), /must not contain headerName/)
   assert.throws(() => assertSafeConfig(tailscaleConfig({ publicOrigin: TAILSCALE_ORIGIN })), /must not contain publicOrigin/)
-  assert.throws(() => assertSafeConfig(tailscaleConfig({ tls: {} })), /must not contain tls/)
+  assert.throws(() => assertSafeConfig(tailscaleConfig({ tls: {} })), /tls is only valid for headscale-tcp-serve/)
   assert.throws(() => assertSafeConfig(tailscaleConfig({ funnel: true })), /must not contain funnel/)
   assert.throws(() => assertSafeConfig(tailscaleConfig({ extra: true })), /unsupported configuration key/)
 })
@@ -60,7 +67,49 @@ test('incompatible provider/auth pairings and easytier fail before bind', () => 
     externalOrigin: 'https://gateway.example.invalid:8443',
     provider: { type: 'headscale' },
     auth: { mode: 'trusted-header', trustedPrincipals: ['login:operator@example.invalid'] },
-  }), /tailscale-serve or cloudflare-access/)
+  }), /tailscale-serve, cloudflare-access, or headscale-tcp-serve/)
+  assert.throws(() => assertSafeConfig({
+    enabled: true,
+    externalOrigin: 'https://gateway.example.invalid:8443',
+    provider: { type: 'zerotier' },
+    auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: CREDENTIAL_STORE_PATH },
+  }), /tailscale-serve, cloudflare-access, or headscale-tcp-serve/)
+  assert.throws(() => assertSafeConfig({
+    enabled: true,
+    externalOrigin: 'https://gateway.example.invalid:8443',
+    provider: { type: 'wireguard' },
+    auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: CREDENTIAL_STORE_PATH },
+  }), /tailscale-serve, cloudflare-access, or headscale-tcp-serve/)
+})
+
+test('headscale-tcp-serve accepts only gateway-credential plus a closed TLS object', () => {
+  const safe = assertSafeConfig(headscaleTcpConfig())
+  assert.equal(safe.provider.type, 'headscale-tcp-serve')
+  assert.equal(safe.auth.mode, 'gateway-credential')
+  assert.equal(safe.identity.identityKind, 'none')
+  assert.equal(safe.identity.principalNamespace, 'credential')
+  assert.equal(safe.listenHost, GATEWAY_HOST)
+  assert.equal(safe.listenPort, GATEWAY_PORT)
+  assert.deepEqual(safe.upstream, { host: '127.0.0.1', port: 3080 })
+  assert.equal(safe.externalOrigin, HEADSCALE_ORIGIN)
+  assert.deepEqual(safe.tls, { certPath: '/path/to/dsh-one-gateway/cert.pem', keyPath: '/path/to/dsh-one-gateway/key.pem' })
+  assert.throws(() => assertSafeConfig(headscaleTcpConfig({
+    auth: { mode: 'trusted-header', trustedPrincipals: ['login:operator@example.invalid'] },
+  })), /gateway-credential/)
+  assert.throws(() => assertSafeConfig(headscaleTcpConfig({
+    auth: { mode: 'signed-jwt', trustedPrincipals: ['email:operator@example.invalid'] },
+  })), /gateway-credential/)
+  assert.throws(() => assertSafeConfig(headscaleTcpConfig({ tls: undefined })), /tls is required/)
+  assert.throws(() => assertSafeConfig(headscaleTcpConfig({
+    tls: { certPath: '/path/to/dsh-one-gateway/cert.pem', keyPath: '/path/to/dsh-one-gateway/key.pem', caPath: '/path/to/ca.pem' },
+  })), /unsupported tls key/)
+  assert.throws(() => assertSafeConfig(headscaleTcpConfig({
+    tls: { certPath: 'cert.pem', keyPath: '/path/to/dsh-one-gateway/key.pem' },
+  })), /tls.certPath must be an absolute path/)
+  assert.throws(() => assertSafeConfig(headscaleTcpConfig({ listenHost: '0.0.0.0' })), /must not contain listenHost/)
+  assert.throws(() => assertSafeConfig(cloudflareConfig({
+    tls: { certPath: '/path/to/dsh-one-gateway/cert.pem', keyPath: '/path/to/dsh-one-gateway/key.pem' },
+  })), /tls is only valid for headscale-tcp-serve/)
 })
 
 test('Cloudflare configuration requires verify-only, team origin, audience, and rejects quick tunnels', () => {
