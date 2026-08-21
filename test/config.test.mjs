@@ -43,6 +43,12 @@ test('incompatible provider/auth pairings and easytier fail before bind', () => 
   assert.throws(() => assertSafeConfig(tailscaleConfig({
     auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: '/path/to/dsh-one-gateway/credentials.json' },
   })), /trusted-header/)
+  assert.throws(() => assertSafeConfig(cloudflareConfig({
+    auth: { mode: 'gateway-credential', trustedPrincipals: ['credential:operator-1'], credentialStorePath: '/path/to/dsh-one-gateway/credentials.json' },
+  })), /signed-jwt/)
+  assert.throws(() => assertSafeConfig(tailscaleConfig({
+    identity: { identityKind: 'none' },
+  })), /unsupported configuration key/)
   assert.throws(() => assertSafeConfig({
     enabled: true,
     externalOrigin: 'https://gateway.example.invalid:8443',

@@ -38,6 +38,32 @@ function sessionIdFromCookies(rawHeaders) {
   return { kind: 'ok', value }
 }
 
+const LOGIN_PAGE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DSH One Gateway</title>
+</head>
+<body>
+<form method="post" action="/.dsh-one-gateway/login">
+<label for="credential">Credential</label>
+<input id="credential" name="credential" type="password" autocomplete="off" required>
+<button type="submit">Sign in</button>
+</form>
+</body>
+</html>
+`
+
+function loginSuccessHeaders(sessionId) {
+  return {
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': "frame-ancestors 'none'; base-uri 'none'",
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Set-Cookie': sessionCookie(sessionId),
+  }
+}
+
 function uniformLoginDenied(response) {
   response.writeHead(401, {
     'Content-Type': 'text/plain; charset=utf-8',
@@ -49,13 +75,27 @@ function uniformLoginDenied(response) {
   response.end('401 Unauthorized\n')
 }
 
-function loginSucceeded(response, sessionId) {
-  response.writeHead(204, {
+function loginPage(response) {
+  response.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
-    'Content-Security-Policy': "frame-ancestors 'none'; base-uri 'none'",
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
-    'Set-Cookie': sessionCookie(sessionId),
+    'Referrer-Policy': 'no-referrer',
+    'Content-Security-Policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  })
+  response.end(LOGIN_PAGE_HTML)
+}
+
+function loginSucceeded(response, sessionId) {
+  response.writeHead(204, loginSuccessHeaders(sessionId))
+  response.end()
+}
+
+function loginFormSucceeded(response, sessionId) {
+  response.writeHead(303, {
+    ...loginSuccessHeaders(sessionId),
+    Location: '/',
   })
   response.end()
 }
@@ -138,6 +178,18 @@ export function createGatewayCredentialAuth({
       if (path !== LOGIN_PATH) return unhandled()
       if (!response) return unhandled()
       const sourceKey = requestContext.remoteAddress ?? 'unknown'
+      if (requestContext.method === 'GET') {
+        if (!isExpectedHost(requestContext.rawHeaders, externalOrigin)) {
+          uniformLoginDenied(response)
+          return handledResponse(response)
+        }
+        if (!isAllowedFetchSite(requestContext.rawHeaders)) {
+          uniformLoginDenied(response)
+          return handledResponse(response)
+        }
+        loginPage(response)
+        return handledResponse(response)
+      }
       if (requestContext.method !== 'POST') {
         uniformLoginDenied(response)
         return handledResponse(response)
@@ -181,7 +233,12 @@ export function createGatewayCredentialAuth({
         }
         limiter.recordSuccess(sourceKey)
         const sessionId = sessions.create(entry.principalId)
-        loginSucceeded(response, sessionId)
+        const type = String(request.headers?.['content-type'] ?? '').split(';')[0].trim().toLowerCase()
+        if (type === 'application/x-www-form-urlencoded') {
+          loginFormSucceeded(response, sessionId)
+        } else {
+          loginSucceeded(response, sessionId)
+        }
         return handledResponse(response)
       } catch {
         limiter.recordFailure(sourceKey)

@@ -44,10 +44,17 @@ Cloudflare Access 的 Cloudflare Tunnel）只负责把请求送到本机。加�
 1. **私有网络成员身份从来不是授权。** 监听 `0.0.0.0`、把 RFC1918 当成放行，都
    不在范围内。监听只在回环。同一 Wi-Fi、同一 tailnet 或同一 mesh，都不会让你
    进来。
-2. **没有登录页、密码或共享令牌作为信任根。** 密码表单、共享令牌、会话 cookie
-   门是很大的认证面，也是常见出 bug 的地方。身份来自入口本身：Serve 注入的
+2. **对 Tailscale Serve 和 Cloudflare Access，身份来自入口本身——不是登录页、
+   密码或共享令牌。** 密码表单、共享令牌、会话 cookie 门是很大的认证面，也是
+   常见出 bug 的地方。这两种已交付模式使用 Serve 注入的
    `Tailscale-User-Login`，或本地校验的 Cloudflare Access JWT。我们核对允许名单，
-   不让你自设密码。
+   不让你自设密码。`gateway-credential` 是给没有原生身份的传输准备的、更小的
+   专用登录：系统生成的每主体凭证（不是用户自选密码）、只存校验值、有界的
+   `HttpOnly`/`Secure`/`SameSite=Strict` 会话、可单独吊销、限速但不永久锁定。
+   相对于典型的用户自选或共享密码，它在可猜测性、存储泄露和吊销范围上更强；
+   这不是“无密码”或“没有登录”，也不是宣称优于每一种密码或通行密钥。该模式已
+   完整实现，浏览器登录可用，但目前已交付的入口（Tailscale Serve、Cloudflare
+   Access）都不会选择它——留给未来没有原生身份的纯传输入口。
 3. **一个插件、一条引导命令、一份允许名单。** 不必为每个入口单独搭一套。
    Tailscale Serve 和带 Access 的 Cloudflare Tunnel 共用同一个回环网关。新的
    入口是再加一个适配器，不是再做一个产品。
@@ -132,9 +139,12 @@ Access 仍附着在该隧道上；setup 会如实说明，并且仍然拒绝缺�
   `sub`。允许名单使用 `email:<exact-email>`。永远不信任 `CF_Authorization`
   cookie。
 - **`gateway-credential`（已实现；尚无已交付的入口使用它）。** 持有为每个操作
-  员签发的 ≥256 bit 凭证，在保留登录端点换成短时 `__Host-` 会话 cookie。留给
-  未来只提供传输的入口（例如已推迟的 EasyTier）。Tailscale 与 Cloudflare 不会
-  选择该模式。
+  员签发的 ≥256 bit 凭证（由 CLI 生成，不是用户自选密码），经 JSON API 或同源
+  登录表单的 POST 正文提交——从不放进 URL 查询参数——换成短时 `__Host-` 会话
+  cookie（`HttpOnly`、`Secure`、`SameSite=Strict`）。网关只存校验哈希；会话可
+  单独吊销，尝试会被限速但不永久锁定。该模式已完整实现，浏览器登录可用，但
+  目前已交付的入口（Tailscale Serve、Cloudflare Access）都不会选择它——留给
+  未来没有原生身份的纯传输入口。
 
 ## 安装之后
 

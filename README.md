@@ -43,11 +43,23 @@ a public tunnel. This plugin is a different contract:
 1. **Private network membership is never authorization.** Binding `0.0.0.0` or
    treating RFC1918 as an allow is out of scope. The listener stays on loopback.
    Being on the same Wi-Fi, tailnet, or mesh does not get you in.
-2. **There is no login page, password, or shared token as the trust root.**
+2. **For Tailscale Serve and Cloudflare Access, identity comes from the
+   provider — not a login page, password, or shared token.**
    Password forms, shared tokens, and session-cookie doors are a large auth
-   surface and a common source of bugs. Identity comes from the provider itself:
-   Serve's injected `Tailscale-User-Login`, or a locally verified Cloudflare
-   Access JWT. We check an allowlist. We do not ask you to invent a password.
+   surface and a common source of bugs. Those two shipped modes use Serve's
+   injected `Tailscale-User-Login`, or a locally verified Cloudflare Access
+   JWT. We check an allowlist. We do not ask you to invent a password.
+   `gateway-credential` is a smaller, purpose-built login for transports with
+   no native identity: a generated per-principal credential (not a user-chosen
+   password), verifier-only storage, a bounded
+   `HttpOnly`/`Secure`/`SameSite=Strict` session, individual revocation, and
+   rate limiting without permanent lockout. Compared with a typical
+   user-chosen or shared password, that is stronger on guessability, storage
+   disclosure, and revocation; it is not "passwordless" and not a claim of
+   superiority over every password or passkey. This mode is fully implemented
+   and its browser login works, but no currently-shipped provider (Tailscale
+   Serve, Cloudflare Access) selects it — it's ready for a future
+   transport-only provider with no native identity of its own.
 3. **One plugin, one onboarding command, one allowlist.** Instead of a different
    bespoke setup per provider, Tailscale Serve and Cloudflare Tunnel with Access
    share one loopback gateway. A new provider is another adapter, not another
@@ -143,10 +155,16 @@ fixed provider; you cannot mix them.
   identity `type`, scalar `email`, and non-empty `sub`. The allowlist uses
   `email:<exact-email>`. The `CF_Authorization` cookie is never trusted.
 - **`gateway-credential` (implemented; no shipped provider uses it yet).**
-  Possession of a distinct ≥256-bit credential issued per operator, exchanged at
-  a reserved login endpoint for a short-lived `__Host-` session cookie. Ready
-  for a future transport-only provider such as EasyTier (deferred). Not selected
-  by Tailscale or Cloudflare.
+  Possession of a distinct ≥256-bit credential issued per operator (CLI-
+  generated, not a user-chosen password), submitted in a POST body from the
+  JSON API or a same-origin login form — never a URL query parameter — and
+  exchanged for a short-lived `__Host-` session cookie (`HttpOnly`, `Secure`,
+  `SameSite=Strict`). The gateway stores only a verifier hash; sessions are
+  individually revocable and attempts are rate-limited without permanent
+  lockout. This mode is fully implemented and its browser login works, but no
+  currently-shipped provider (Tailscale Serve, Cloudflare Access) selects it
+  — it's ready for a future transport-only provider with no native identity
+  of its own.
 
 ## After setup
 
